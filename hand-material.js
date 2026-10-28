@@ -14,7 +14,7 @@ function clean(text){return String(text||"").replace(/^(?:我(?:这(?:次|条|�
 function parse(input){
  const raw=String(input||"").trim();
  if(!raw)return {items:[],warnings:["请先说明每件手作使用的材料和数量，例如：用了6颗珍珠、2颗黄水晶、1个龙虾扣。"]};
- const chunks=raw.replace(/(?:再加上|再加入|并且|还有|以及|另外|加上|搭配)/g,"，").split(/[，,、；;\n+＋]/g).map(clean).filter(Boolean);
+ const chunks=raw.replace(/(?:再加上|再加入|再加|并且|还有|以及|另外|加上|搭配|和(?=[一二两三四五六七八九十\d]+(?:颗|个|粒|枚)))/g,"，").split(/[，,、；;\n+＋]/g).map(clean).filter(Boolean);
  const patternNum="(\\d+(?:\\.\\d+)?|[一二两三四五六七八九十]+)";
  const first=new RegExp("^"+patternNum+"\\s*("+units+")\\s*(.+)$","i");
  const last=new RegExp("^(.+?)\\s*"+patternNum+"\\s*("+units+")(?:\\s*(?:左右|大约|约))?$","i");
