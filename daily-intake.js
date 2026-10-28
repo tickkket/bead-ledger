@@ -34,6 +34,8 @@ function preview(){
  '<div id="daily-shape-box"><label>形状 / 珠型</label><input id="daily-shape-search" class="local-field" type="search" placeholder="输入关键词搜索珠形" style="margin-bottom:7px"><select id="daily-shape-select" class="local-field"><option value="">点击展开珠形选项</option></select><label>已选形状 / 自定义形状</label><input id="daily-shape" class="local-field" value="'+E(x.shape||'')+'" placeholder="从上方选择，或者直接输入新形状"></div>'+
  '<div class="local-row"><div class="local-narrow"><label>规格</label><input id="daily-spec" class="local-field" value="'+E([x.size,x.length].filter(Boolean).join(" · "))+'"></div><div class="local-narrow"><label>数量</label><input id="daily-qty" type="number" class="local-field" min="0.0001" step="any" value="'+x.qty+'"></div></div>'+
  '<div class="local-row"><div class="local-narrow"><label>单位</label><select class="local-field" id="daily-unit">'+["颗","串","个","件","包","卷","米","厘米","克","套"].map(v=>'<option value="'+v+'" '+(v===x.unit?"selected":"")+'>'+v+'</option>').join("")+'</select></div><div class="local-narrow"><label>实际购入总价（元）</label><input id="daily-total" class="local-field" type="number" min="0" step="any" value="'+(x.price??"")+'"></div></div>'+
+ '<div class="local-row"><div class="local-narrow"><label>建议售价（元/当前单位）</label><input id="daily-suggested-price" class="local-field" type="number" min="0" step="any" placeholder="可留空"></div><div class="local-narrow"><label>实际价值参考（元/当前单位）</label><input id="daily-actual-value" class="local-field" type="number" min="0" step="any" placeholder="可留空"></div></div>'+
+ '<div class="local-row"><div class="local-narrow"><label>单颗克重（g，估值可用）</label><input id="daily-bead-weight" class="local-field" type="number" min="0" step="any" placeholder="可留空"></div><div class="local-narrow"><div id="daily-value-preview" class="local-help" aria-live="polite"></div></div></div>'+
  '<div id="daily-bead-convert" class="local-help"></div>'+
  '<div class="local-row"><div class="local-narrow"><label>购买渠道 *</label><select id="daily-source-channel" class="local-field">'+purchaseSourceOptions(splitPurchaseSource(x.source).channel)+'</select><input id="daily-source-detail" class="local-field" placeholder="店铺、直播间等补充说明" value="'+E(splitPurchaseSource(x.source).detail)+'"></div><div class="local-narrow"><label>日期</label><input id="daily-date" type="date" class="local-field" value="'+today()+'"></div></div>'+
  '<div class="di-full"><label>物料 / 成品图片（可选）</label><div class="di-photo-grid"><div class="di-photo-cell"><label>从相册选择</label><input id="daily-image-file" type="file" accept="image/*" class="di-file"></div><div class="di-photo-cell"><label>用相机拍照</label><input id="daily-image-camera" type="file" accept="image/*" capture="environment" class="di-file"></div></div><div class="local-row" style="margin:7px 0"><button type="button" class="local-btn main" data-daily="camera-api">📷 网页相机（备用）</button><button type="button" class="local-btn" data-daily="paste-photo">粘贴已复制图片</button></div><div class="di-photo-preview"><img id="daily-image-preview" alt="进货图片预览" style="display:none;width:86px;height:86px;object-fit:cover;border-radius:10px"><div class="di-photo-info"><div id="daily-image-status" class="local-help">未选择图片</div><button type="button" class="local-btn" data-daily="edit-photo">✎ 编辑图片</button><button type="button" class="local-btn" data-daily="remove-image">移除图片</button></div></div></div>'+
@@ -75,16 +77,51 @@ imageData="";
  showShapes();
 
  q("daily-kind").addEventListener("change",()=>{q("daily-purchase-type-wrap").style.display=q("daily-kind").value==="bead"?"":"none";});q("daily-kind").dispatchEvent(new Event("change"));const onImageChange=async e=>{const file=e.target.files?.[0];if(!file)return;imageBusy=true;q("daily-image-status").textContent="正在准备图片…";try{const original=await shrinkImage(file);const edited=await window.BeadPhotoEditor.open(original);if(edited){imageData=edited;const preview=q("daily-image-preview");preview.src=edited;preview.style.display="block";q("daily-image-status").textContent="已编辑图片，确认入库后保存。";}else q("daily-image-status").textContent="已取消编辑，原有图片未改变。";}catch(err){q("daily-image-status").textContent="图片处理失败："+err.message;}finally{imageBusy=false;e.target.value="";}};q("daily-image-file").addEventListener("change",onImageChange);q("daily-image-camera").addEventListener("change",onImageChange);
- for(const el of box.querySelectorAll("#daily-qty,#daily-total"))el.addEventListener("input",costPreview);q("daily-unit").addEventListener("change",changeUnit);rememberedUnit=x.unit;
+ for(const el of box.querySelectorAll("#daily-qty,#daily-total"))el.addEventListener("input",costPreview);q("daily-unit").addEventListener("change",changeUnit);q("daily-bead-weight").addEventListener("input",refreshValuePreview);q("daily-name").addEventListener("change",refreshValuePreview);q("daily-kind").addEventListener("change",refreshValuePreview);rememberedUnit=x.unit;refreshValuePreview();
  costPreview();
  q("local-status").textContent="已整理，请核对。"+(x.beads&&x.unit==="串"?"珠子约"+x.beads+"颗，仅作为备注；库存按串计。":"");
 }
-function changeUnit(){const unit=q("daily-unit").value,cv=draft?.conversion;if(cv&&draft.kind==="bead"&&(unit==="串"||unit==="颗")&&(rememberedUnit==="串"||rememberedUnit==="颗")){const oldQty=Number(q("daily-qty").value);if(rememberedUnit==="串"&&unit==="颗"){const per=cv.beadTotal?cv.beadTotal/cv.strandCount:null;if(per)q("daily-qty").value=Math.round(oldQty*per);else q("local-status").textContent="缺少可估算的珠径或串长，请先填写数量"}else if(rememberedUnit==="颗"&&unit==="串"){const per=cv.beadTotal?cv.beadTotal/cv.strandCount:null;if(per)q("daily-qty").value=Number((oldQty/per).toFixed(4));else q("local-status").textContent="缺少可估算的珠径或串长，请先填写数量"}}rememberedUnit=unit;costPreview()}
+function marketValuePerStockUnit(){
+ if(!draft||q("daily-kind")?.value!=="bead")return null;
+ const perBead=Number(q("daily-bead-weight")?.value||0);
+ if(!Number.isFinite(perBead)||perBead<=0)return null;
+ const name=T(q("daily-name")?.value)||draft.category;
+ const subtype=draft.category||crystalNickname(name)||name;
+ const reference=marketReference({subtype,weight:perBead,grade:"普通",purchaseDate:today()});
+ if(!Number.isFinite(reference)||reference<=0)return null;
+ const unit=q("daily-unit")?.value;
+ let count=1;
+ if(unit==="串"){
+  const cv=draft.conversion;
+  if(!cv?.beadTotal||!cv?.strandCount)return null;
+  count=cv.beadTotal/cv.strandCount;
+ }else if(unit!=="颗")return null;
+ return Math.round(perBead*reference*count*10000)/10000;
+}
+function refreshValuePreview(){
+ const e=q("daily-value-preview");if(!e)return;
+ const value=marketValuePerStockUnit();
+ const unit=q("daily-unit")?.value||"颗";
+ e.textContent=value!==null?"按已有克价估算：¥"+value.toFixed(2)+"/"+unit+"（仅参考）":"暂无可用估值，可手动填写";
+}
+function priceInputValue(id,label){
+ const raw=q(id)?.value?.trim()??"";
+ if(raw==="")return null;
+ const value=Number(raw);
+ if(!Number.isFinite(value)||value<0||value>10000000)throw Error(label+"必须是有效的非负金额");
+ return value;
+}
+function changeUnit(){const unit=q("daily-unit").value,cv=draft?.conversion;if(cv&&draft.kind==="bead"&&(unit==="串"||unit==="颗")&&(rememberedUnit==="串"||rememberedUnit==="颗")){const oldQty=Number(q("daily-qty").value);if(rememberedUnit==="串"&&unit==="颗"){const per=cv.beadTotal?cv.beadTotal/cv.strandCount:null;if(per)q("daily-qty").value=Math.round(oldQty*per);else q("local-status").textContent="缺少可估算的珠径或串长，请先填写数量"}else if(rememberedUnit==="颗"&&unit==="串"){const per=cv.beadTotal?cv.beadTotal/cv.strandCount:null;if(per)q("daily-qty").value=Number((oldQty/per).toFixed(4));else q("local-status").textContent="缺少可估算的珠径或串长，请先填写数量"}}// Suggested and reference prices are amounts per inventory unit, not entire purchase totals.
+ if(unit!==rememberedUnit&&draft?.kind==="bead"&&["串","颗"].includes(unit)&&["串","颗"].includes(rememberedUnit)){
+  const c=draft.conversion,per=c?.beadTotal&&c?.strandCount?c.beadTotal/c.strandCount:null;
+  if(per&&per>0){for(const id of ["daily-suggested-price","daily-actual-value"]){const input=q(id);if(!input||input.value.trim()==="")continue;const amount=Number(input.value);if(Number.isFinite(amount)&&amount>=0)input.value=Number((unit==="颗"?amount/per:amount*per).toFixed(4));}}
+ }
+ rememberedUnit=unit;costPreview();refreshValuePreview()}
 function costPreview(){const qty=Number(q("daily-qty").value),val=q("daily-total").value,total=Number(val);const cv=draft?.conversion, unit=q("daily-unit").value;const info=cv&&draft.kind==="bead"&&cv.theoreticalPerStrand?"按珠径 "+cv.diameterMm+"mm 和串长 "+cv.lengthCm+"cm 估计每串约 "+cv.theoreticalPerStrand+"颗。"+(cv.source==="口述颗数"?"你口述约"+cv.beadTotal+"颗，优先使用口述数量。":"未提供颗数时按理论值估算。"):"没有足够规格估算每串颗数。";q("daily-bead-convert").textContent=draft?.kind==="bead"?info:"";q("daily-cost").textContent=val!==""&&qty>0&&Number.isFinite(total)?"平均进货成本 ¥"+(total/qty).toFixed(4)+"/"+unit+(draft?.kind==="bead"?"；整批总价保持不变。":""):"请填写总进价和数量";}
 async function save(){
  if(!draft)throw Error("请先识别进货");
  if(imageBusy)throw Error("图片正在处理，请稍后再保存");
- const kind=q("daily-kind").value,purchaseType=q("daily-purchase-type").value,name=T(q("daily-name").value),shape=T(q('daily-shape')?.value),spec=T(q("daily-spec").value),qty=Number(q("daily-qty").value),unit=q("daily-unit").value,rawPrice=q("daily-total").value,price=Number(rawPrice),source=makePurchaseSource(q("daily-source-channel").value,q("daily-source-detail").value),date=q("daily-date").value,notes=T(q("daily-notes").value);
+ const kind=q("daily-kind").value,purchaseType=q("daily-purchase-type").value,name=T(q("daily-name").value),shape=T(q('daily-shape')?.value),spec=T(q("daily-spec").value),qty=Number(q("daily-qty").value),unit=q("daily-unit").value,rawPrice=q("daily-total").value,price=Number(rawPrice),suggestedPrice=priceInputValue("daily-suggested-price","建议售价"),actualValue=priceInputValue("daily-actual-value","实际价值参考"),beadWeight=priceInputValue("daily-bead-weight","单颗克重"),source=makePurchaseSource(q("daily-source-channel").value,q("daily-source-detail").value),date=q("daily-date").value,notes=T(q("daily-notes").value);
  if(kind==="bead"&&!BEAD_PURCHASE_LABEL[purchaseType])throw Error("请选择具体类型：散珠、素串或半成品");
  if(!["bead","metal","supply","finished"].includes(kind))throw Error("请确认类型");
  if(!name||name.startsWith("待填写"))throw Error("请填写明确名称");
@@ -95,10 +132,10 @@ async function save(){
  if(!confirm("确认进货入库？\n"+name+" × "+qty+unit+"，共 ¥"+price.toFixed(2)+"\n"+(kind==="finished"?"外购成品，非手作":"物料库存")))return;
  const id=uid(),createdAt=new Date().toISOString(),cost=round(price/qty,8);
  if(kind==="finished"){
-  const entry={id,type:"out",name,producedQty:qty,stock:qty,buyPrice:cost,price:0,source,notes:notes+"；规格："+spec,image:imageData||"",sameOnline:false,createdAt,cost:{unit:cost,material:cost,labor:0,stall:0,tool:0}};
+  const entry={id,type:"out",name,producedQty:qty,stock:qty,buyPrice:cost,price:suggestedPrice??0,actualValue:actualValue??null,source,notes:notes+"；规格："+spec,image:imageData||"",sameOnline:false,createdAt,cost:{unit:cost,material:cost,labor:0,stall:0,tool:0}};
   await commit(()=>state.products.push(entry),"外购成品已入库（非手作）");
  }else{
-  const entry={id,kind,name,purchaseType:kind==="bead"?purchaseType:undefined,shape:kind==="bead"?shape:"",subtype:kind==="bead"?(draft.category||name):"",beadGroup:kind==="bead"?inferStoneClass(draft.category||name):"",spec,qty,initialQty:qty,unit,unitCost:cost,totalPurchaseCost:price,source,purchaseDate:date,notes,createdAt,image:imageData||"",grade:"普通",flaw:"",weight:0,isWelfare:false,qtyApprox:draft.approx&&unit==="颗",approxBeadCount:draft.conversion?.beadTotal||null,diameterMm:draft.conversion?.diameterMm||null,strandLengthCm:draft.conversion?.lengthCm||null,strandCount:unit==="串"?qty:draft.conversion?.strandCount||null,marketGram:0,suggestedPrice:0};
+  const entry={id,kind,name,purchaseType:kind==="bead"?purchaseType:undefined,shape:kind==="bead"?shape:"",subtype:kind==="bead"?(draft.category||name):"",beadGroup:kind==="bead"?inferStoneClass(draft.category||name):"",spec,qty,initialQty:qty,unit,unitCost:cost,suggestedPrice:suggestedPrice??0,actualValue:actualValue??null,actualValueUnit:actualValue!==null?unit:"",totalPurchaseCost:price,source,purchaseDate:date,notes,createdAt,image:imageData||"",grade:"普通",flaw:"",weight:kind==="bead"?(beadWeight??0):0,isWelfare:false,qtyApprox:draft.approx&&unit==="颗",approxBeadCount:draft.conversion?.beadTotal||null,diameterMm:draft.conversion?.diameterMm||null,strandLengthCm:draft.conversion?.lengthCm||null,strandCount:unit==="串"?qty:draft.conversion?.strandCount||null,marketGram:0};
   await commit(()=>{state.materials.push(entry);if(kind==="bead")usageAdd([entry])},"物料已入库");
  }
  q("daily-description").value="";q("daily-preview").style.display="none";draft=null;imageData="";
