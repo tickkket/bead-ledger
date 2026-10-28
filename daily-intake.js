@@ -51,7 +51,7 @@ async function save(){
   const entry={id,type:"out",name,producedQty:qty,stock:qty,buyPrice:cost,price:0,source,notes:notes+"；规格："+spec,image:"",sameOnline:false,createdAt,cost:{unit:cost,material:cost,labor:0,stall:0,tool:0}};
   await commit(()=>state.products.push(entry),"外购成品已入库（非手作）");
  }else{
-  const entry={id,kind,name,subtype:kind==="bead"?(draft.category||name):"",beadGroup:kind==="bead"?guessGroup(name):"",spec,qty,initialQty:qty,unit,unitCost:cost,totalPurchaseCost:price,source,purchaseDate:date,notes,createdAt,image:"",grade:"普通",flaw:"",weight:0,isWelfare:false,qtyApprox:draft.approx&&unit==="颗",approxBeadCount:draft.beads||null,marketGram:0,suggestedPrice:0};
+  const entry={id,kind,name,subtype:kind==="bead"?(draft.category||name):"",beadGroup:kind==="bead"?inferStoneClass(draft.category||name):"",spec,qty,initialQty:qty,unit,unitCost:cost,totalPurchaseCost:price,source,purchaseDate:date,notes,createdAt,image:"",grade:"普通",flaw:"",weight:0,isWelfare:false,qtyApprox:draft.approx&&unit==="颗",approxBeadCount:draft.beads||null,marketGram:0,suggestedPrice:0};
   await commit(()=>{state.materials.push(entry);if(kind==="bead")usageAdd([entry])},"物料已入库");
  }
  q("daily-description").value="";q("daily-preview").style.display="none";draft=null;
