@@ -20,7 +20,7 @@
 <script>
 'use strict';
 // 本地账本核心无网络请求；PWA shell 另行缓存。金额内部用数值，展示时保留两位小数；原始用量保持最多四位小数。
-const APP_VERSION=8, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
+const APP_VERSION=9, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
 const uid=()=>('i'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 const round=(v,d=4)=>Math.round((Number(v)+Number.EPSILON)*10**d)/10**d;
@@ -41,23 +41,58 @@ async function openStore(){
  storageMode='indexeddb';const saved=await new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readonly');const r=t.objectStore(STORE).get(KEY);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});if(saved)state=normalize(saved);
  }catch(e){console.warn('IndexedDB unavailable',e);db=null;try{const x=localStorage.getItem(DB_NAME);if(x)state=normalize(JSON.parse(x));localStorage.setItem(DB_NAME+'-probe','1');localStorage.removeItem(DB_NAME+'-probe');storageMode='localStorage'}catch(_){storageMode='unavailable'}}
 }
-function normalize(x){const base=stateInit();if(!x||typeof x!=='object')return base;for(const k of ['materials','batches','products','markets','sales','adjustments','marketHistory','marketSamples'])if(Array.isArray(x[k]))base[k]=x[k];base.settings={...base.settings,...(x.settings||{})};base.categoryUsage=x.categoryUsage&&typeof x.categoryUsage==='object'?x.categoryUsage:{};return base}
+function normalize(x){const base=stateInit();if(!x||typeof x!=='object')return base;for(const k of ['materials','batches','products','markets','sales','adjustments','marketHistory','marketSamples'])if(Array.isArray(x[k]))base[k]=x[k];base.settings={...base.settings,...(x.settings||{})};base.categoryUsage=x.categoryUsage&&typeof x.categoryUsage==='object'?x.categoryUsage:{};for(const m of base.materials){if(m.kind==='bead')m.beadGroup=ensureStoneClass(m.beadGroup,m.subtype||m.name)}return base}
 async function persist(){if(storageMode==='indexeddb')return new Promise((resolve,reject)=>{try{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(state,KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('数据库保存失败'));tx.onabort=()=>reject(tx.error||new Error('数据库写入中断'))}catch(e){reject(e)}});if(storageMode==='localStorage'){localStorage.setItem(DB_NAME,JSON.stringify(state));return}throw Error('此浏览器无法持久化保存，请换用 Chrome/Edge 浏览器打开')}
 async function commit(action,message='已保存'){const old=structuredClone(state);try{action();await persist();closeModal();render();toast(message)}catch(err){state=old;render();toast('操作未保存：'+(err.message||err));console.error(err)}}
 const byId=(arr,id)=>arr.find(o=>o.id===id);
 
-// 可搜索珠子品类：常用品类根据已保存记录的选择次数自动排到前面。
-const BEAD_GROUPS={'珍珠/贝珠':['珍珠','淡水珍珠','海水珍珠','贝珠','仿珍珠','玻璃珍珠','米珠'],天然石:['白水晶','粉水晶','紫水晶','黄水晶','草莓晶','葡萄石','海蓝宝','碧玺','石榴石','玛瑙','玉髓','月光石','拉长石','虎眼石','绿幽灵','黑曜石','萤石','青金石','绿松石','天河石','红纹石','紫锂辉','太阳石','东陵玉','翡翠','和田玉'],木珠:['檀木','小叶紫檀','绿檀','黑檀','沉香木','黄花梨','崖柏','桃木','菩提根木珠','普通木珠'],菩提:['星月菩提','金刚菩提','凤眼菩提','菩提根','千眼菩提','莲花菩提','百香籽','橄榄核','椰蒂','椰壳']};
+// 自定义六类珠子进货体系（业务归档，不代表专业宝石鉴定）。未知材料进待确认品类。
+const BEAD_GROUPS={
+ '石英水晶类':['白水晶','紫水晶','黄水晶','黄水','钻切黄水','茶晶','烟晶','粉水晶','发晶','金发晶','黑发晶','绿发晶','红发晶','兔毛','红兔毛','白兔毛','绿兔毛','草莓晶','胶花','红胶花','紫胶花','幽灵','绿幽灵','红幽灵','白幽灵','银耀石','银曜石','虎眼石'],
+ '长石彩光类':['拉长石','灰月光','月光石','白月光','日光石','太阳石'],
+ '彩色单晶矿石类':['萤石','紫萤石','紫方糖','碧玺','石榴石','托帕石','海蓝宝','摩根石','紫锂辉'],
+ '翡翠&软玉类':['翡翠','白水','蓝水','和田玉'],
+ '其他集合玉石类':['玛瑙','玉髓','绿松石','青金石','阿富汗玉','东陵玉'],
+ '有机/香木类':['蜜蜡','琥珀','珍珠','淡水珍珠','海水珍珠','贝珠','仿珍珠','玻璃珍珠','米珠','香木葫芦','香木珠','檀木','小叶紫檀','绿檀','黑檀','沉香木','沉香','黄花梨','崖柏','桃木','木珠','菩提','星月菩提','金刚菩提','凤眼菩提','菩提根','千眼菩提','莲花菩提','百香籽','橄榄核','椰蒂','椰壳']
+};
+const STONE_CLASS_NAMES=[...Object.keys(BEAD_GROUPS),'待确认品类'];
+const groupOpts=STONE_CLASS_NAMES.map(x=>[x,x]);
 const SOURCE_CHOICES=['小红书','淘宝','拼多多','1688','抖音','微信','线下批发','其他'];
 const GRADES=[['精品','精品 / 品相佳'],['优选','优选 / 状态好'],['普通','普通 / 一般'],['瑕疵','瑕疵 / 明显瑕疵']];
 const GRADE_FACTOR={精品:1.35,优选:1,普通:.7,瑕疵:.35};
-const groupOpts=[['天然石','天然石'],['珍珠/贝珠','珍珠/贝珠'],['木珠','木珠'],['菩提','菩提']];
-function guessGroup(x){const v=String(x||'');if(/珍珠|贝珠|米珠/.test(v))return '珍珠/贝珠';if(v==='木珠'||/木|檀|花梨|崖柏/.test(v))return '木珠';if(v==='菩提'||/菩提|百香籽|椰蒂|椰壳|橄榄核/.test(v))return '菩提';return '天然石'}
-function sortedCategories(group,value=''){const pool=[...(BEAD_GROUPS[group]||[]),...state.markets.map(x=>x.category),...state.materials.filter(x=>x.kind==='bead'&&(!x.beadGroup||x.beadGroup===group)).map(x=>x.subtype),String(value||'')].map(x=>String(x||'').trim()).filter(Boolean);return [...new Set(pool)].sort((a,b)=>(n(state.categoryUsage[b])-n(state.categoryUsage[a]))||a.localeCompare(b,'zh'))}
-function beadCategoryField(name,label,value='',group='天然石'){
- const listId='beadlist-'+name+'-'+Math.random().toString(36).slice(2,7);
- return `<div class="field"><label>${esc(label)}</label><input class="input" name="${attr(name)}" type="search" list="${listId}" value="${attr(value)}" placeholder="输入搜索或从下拉选品类" autocomplete="off"><datalist id="${listId}">${sortedCategories(group,value).map(x=>`<option value="${attr(x)}"></option>`).join('')}</datalist><div class="hint">可搜索，也可新增品类；常用品类优先展示</div></div>`
+const classRegex={
+ '石英水晶类':/石英|白水晶|紫水晶|黄水晶|钻切黄水|黄水(?!晶)|茶晶|烟晶|粉水晶|发晶|兔毛|草莓晶|胶花|幽灵|银耀石|银曜石|虎眼石/,
+ '长石彩光类':/拉长石|灰月光|白月光|月光石|日光石|太阳石/,
+ '彩色单晶矿石类':/萤石|紫方糖|碧玺|石榴石|托帕石|海蓝宝|摩根石|紫锂辉/,
+ '翡翠&软玉类':/翡翠|和田玉|蓝水翡翠|白水翡翠/,
+ '其他集合玉石类':/玛瑙|玉髓|绿松石|青金石|阿富汗玉|东陵玉/,
+ '有机/香木类':/蜜蜡|琥珀|珍珠|贝珠|香木|檀木|檀香|沉香|花梨|崖柏|桃木|木珠|菩提|百香籽|橄榄核|椰蒂|椰壳|米珠/
+};
+function inferStoneClass(value){
+ const x=String(value||'').trim();if(!x||x==='福利珠'||x==='未分类福利珠'||x==='盲盒福利珠')return '待确认品类';
+ // A potentially ambiguous shorthand remains unconfirmed rather than being forcibly classified.
+ if(/(?:^|[（(])白水(?:[）)]|$)|(?:^|[（(])蓝水(?:[）)]|$)/.test(x)&&!/翡翠/.test(x))return '待确认品类';
+ for(const [className,words] of Object.entries(BEAD_GROUPS)){
+   if(words.some(word=>word===x))return className;
+ }
+ for(const [className,pattern] of Object.entries(classRegex))if(pattern.test(x))return className;
+ return '待确认品类';
 }
+function ensureStoneClass(value,fallback){
+ return STONE_CLASS_NAMES.includes(value)?value:inferStoneClass(fallback);
+}
+function guessGroup(x){return inferStoneClass(x)}
+function sortedCategories(group,value=''){
+ const pool=[...(BEAD_GROUPS[group]||[]),...state.markets.map(x=>x.category),
+ ...state.materials.filter(x=>x.kind==='bead'&&ensureStoneClass(x.beadGroup,x.subtype||x.name)===group).map(x=>x.subtype),
+ String(value||'')].map(x=>String(x||'').trim()).filter(Boolean);
+ return [...new Set(pool)].sort((a,b)=>(n(state.categoryUsage[b])-n(state.categoryUsage[a]))||a.localeCompare(b,'zh'));
+}
+function beadCategoryField(name,label,value='',group='待确认品类'){
+ const listId='beadlist-'+name+'-'+Math.random().toString(36).slice(2,7);
+ return '<div class="field"><label>'+esc(label)+'</label><input class="input" name="'+attr(name)+'" type="search" list="'+listId+'" value="'+attr(value)+'" placeholder="输入搜索或新建珠子名称" autocomplete="off"><datalist id="'+listId+'">'+sortedCategories(group,value).map(x=>'<option value="'+attr(x)+'"></option>').join('')+'</datalist><div class="hint">识别到名称会推荐六大分类；陌生品类请选择「待确认品类」，日后可修改</div></div>';
+}
+
 function sourceField(name='source',value=''){
  return `<div class="field"><label>购买渠道</label><input class="input" name="${attr(name)}" list="source-options" value="${attr(value)}" placeholder="选小红书 / 淘宝 / 拼多多 / 1688" autocomplete="off"><datalist id="source-options">${SOURCE_CHOICES.map(x=>`<option value="${attr(x)}"></option>`).join('')}</datalist></div>`
 }
