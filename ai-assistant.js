@@ -6,6 +6,20 @@ const T=s=>String(s??"").trim(), N=s=>Number(s), $=s=>document.getElementById(s)
 let photoFile=null, resultRows=[],meta={}, busy=false;
 const style=document.createElement("style");
 style.textContent="#local-assist{position:fixed;right:12px;bottom:87px;z-index:30;border:0;border-radius:28px;padding:12px 15px;background:#315e51;color:white;box-shadow:0 6px 22px #142d2730;font-weight:650}#local-shade{cursor:pointer;position:fixed;inset:0;display:none;z-index:95;background:#13221ca8;align-items:center;justify-content:center;padding:10px}#local-shade.open{display:flex}#local-sheet{cursor:default;background:#fdfdfb;border-radius:17px;width:min(740px,100%);max-height:95dvh;overflow:auto;padding:17px;color:#28362c}#local-sheet textarea{resize:vertical;min-height:115px}#local-sheet label{font-weight:600;font-size:12px;display:block;margin:11px 0 5px}.local-field{border-radius:9px;border:1px solid #d8ded8;background:white;padding:10px;width:100%;color:#27352d;font:inherit}.local-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:9px 0}.local-btn{border:1px solid #d7ded8;background:white;border-radius:9px;padding:9px 11px;color:#315e51;cursor:pointer}.local-btn.main{background:#315e51;border-color:#315e51;color:#fff}.local-btn:disabled{opacity:.55}.local-help{font-size:12px;color:#69776d;line-height:1.6;margin:6px 0}.local-result{font-size:12px;color:#315e51;white-space:pre-wrap;line-height:1.6;margin:10px 0}#local-tsv{font:12px/1.55 monospace;min-height:155px}#local-market{display:none}#local-history>div{border:1px solid #e0e6df;background:white;border-radius:10px;margin-top:7px;padding:10px;font-size:12px;line-height:1.65}#local-status{margin:7px 0;white-space:pre-wrap}#local-sheet .local-narrow{flex:1;min-width:130px}@media(max-width:600px){#local-shade{align-items:flex-end;padding:0}#local-sheet{max-height:95dvh;border-radius:18px 18px 0 0;padding:14px}#local-assist{bottom:85px}}";
+style.textContent+=
+"#local-sheet .di-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 10px;align-items:start}" +
+"#local-sheet .di-field{min-width:0}#local-sheet .di-full{grid-column:1/-1}#local-sheet .di-pair{display:contents}" +
+"#local-sheet .di-grid label{display:block;margin:0 0 4px;font-size:11.5px;font-weight:600}" +
+"#local-sheet .di-grid .local-field{min-width:0;min-height:40px;padding:8px;font-size:13px}" +
+"#local-sheet .di-grid textarea.local-field{min-height:62px;resize:vertical}" +
+"#local-sheet .di-photo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}" +
+"#local-sheet .di-photo-cell{min-width:0;padding:8px;border:1px solid #dce3da;border-radius:10px}" +
+"#local-sheet .di-file{display:block!important;position:static!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important;width:100%;min-width:0;max-width:100%;font-size:12px;padding:5px 0;background:transparent;color:inherit}" +
+"#local-sheet .di-file::file-selector-button{cursor:pointer;border:1px solid #adc7b7;background:#edf5ef;color:#315e51;border-radius:7px;padding:9px;margin-right:5px}" +
+"#local-sheet .di-photo-preview{display:flex;align-items:center;gap:10px;margin-top:8px}" +
+"#local-sheet .di-photo-info{flex:1;min-width:0}" +
+"@media(min-width:760px){#local-sheet .di-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}" +
+"@media(max-width:345px){#local-sheet .di-photo-grid{grid-template-columns:1fr}}";
 document.head.append(style);
 const button=document.createElement("button");button.id="local-assist";button.type="button";button.textContent="✦ 智能进货";document.body.append(button);
 const shade=document.createElement("div");shade.id="local-shade";
