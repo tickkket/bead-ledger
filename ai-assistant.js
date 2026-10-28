@@ -12,11 +12,11 @@ const mask=document.createElement("div");mask.id="ai-mask";
 mask.innerHTML=[
 '<section id="ai-panel" role="dialog" aria-modal="true" aria-label="AI进货助手">',
 '<div class="ai-row" style="justify-content:space-between"><strong style="font-size:18px">✦ AI进货与行情助手</strong><button class="ai-button" data-ai="close">关闭</button></div>',
-'<div class="ai-hint">原有记账离线可用。只有你点击 AI 按钮时，所输入的描述或照片才会发送到 Gemini。AI 需要联网，可能消耗免费额度或产生服务商费用。</div>',
-'<label>Gemini API Key（仅当前网页临时使用；不存储、不上传至 GitHub）</label>',
+'<div class="ai-hint">原有记账离线可用。只有点击 AI 按钮时，选中的描述或照片才会发送到你选择的国内模型。AI 需要联网，可能消耗免费额度或产生服务商费用。</div>',
+'<label id="ai-key-label">阿里云百炼 API Key（本页临时使用；不保存）</label>',
 '<input id="ai-key" type="password" autocomplete="off" class="ai-input" placeholder="请粘贴自己的 API Key">',
-'<div class="ai-hint"><a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer">获取 Gemini API Key</a> · 不要把密钥发送给别人。浏览器直连密钥不如服务端安全，建议仅使用专用、限制额度的测试密钥。</div>',
-'<div class="ai-row"><span class="ai-hint">模型</span><select id="ai-model" class="ai-input" style="flex:1"><option value="gemini-2.5-flash">Gemini 2.5 Flash</option><option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option></select></div>',
+'<div class="ai-hint"><a id="ai-key-link" href="https://bailian.console.aliyun.com/" target="_blank" rel="noopener noreferrer">开通百炼并获取 API Key</a> · 请为个人测试建立专用密钥并设置用量预算。密钥只在当前页面内存中，但浏览器直连仍存在泄露风险；不建议使用有较高支付额度的密钥。</div>',
+'<div class="ai-row"><span class="ai-hint">模型服务</span><select id="ai-provider" class="ai-input" style="flex:1"><option value="qwen">阿里云百炼·通义千问（国内推荐，支持图片和联网查价）</option><option value="deepseek">DeepSeek API（文字整理；不支持本工具联网查价）</option></select></div><div class="ai-hint" id="ai-provider-note">文字整理使用 qwen-plus；图片识别使用 qwen3-vl-plus；行情用 qwen-plus 联网搜索。百炼 API Key 与地区需匹配（默认北京）。</div>',
 '<div class="ai-row"><button class="ai-button primary" data-ai="show-parse">整理盲盒</button><button class="ai-button" data-ai="show-market">联网更新行情</button></div>',
 '<div id="ai-parse">',
 '<label>把这次盲盒的情况直接告诉 AI</label>',
@@ -28,7 +28,7 @@ mask.innerHTML=[
 '<div class="ai-hint">请先核对品类、颗数、瑕疵、价格。导入后仍需确认整盒实际付款和成本分摊，AI不直接扣库存。</div>',
 '</div><div id="ai-market">',
 '<label>需要更新参考行情的品类（每行一种，最多8种）</label><textarea id="ai-names" class="ai-input" placeholder="黄水晶&#10;黑发晶&#10;紫萤石"></textarea>',
-'<div class="ai-hint">只寻找可比的国内散珠批发元/克报价，不将成品或按颗零售价混作批发克价。找不到可靠来源就不更新。</div>',
+'<div class="ai-hint">只寻找明确标示单位的近期散珠批发人民币元/克报价。模型不能凭空生成行情；无可比来源就不更新。此功能仅支持百炼通义千问。</div>',
 '<div class="ai-row"><button class="ai-button primary" data-ai="search">联网查价（按次消耗配额）</button><button class="ai-button" data-ai="apply">核对并写入选中行情</button></div>',
 '<div id="ai-quotes"></div></div>',
 '<div id="ai-message" role="status" aria-live="polite"></div></section>'
@@ -38,17 +38,43 @@ const q=id=>document.getElementById(id),message=(s,bad=false)=>{q("ai-message").
 launcher.onclick=()=>{mask.classList.add("open");if(!q("ai-names").value){const names=[...new Set([...state.materials.filter(x=>x.kind==="bead"&&!x.isWelfare).map(x=>x.subtype),...state.markets.map(x=>x.category)].filter(Boolean))];q("ai-names").value=names.slice(0,8).join("\n");}};
 function tab(t){q("ai-parse").style.display=t==="parse"?"":"none";q("ai-market").style.display=t==="market"?"":"none";message("");}
 function parseJSON(s){let t=String(s||"").trim();const bt=String.fromCharCode(96);if(t.startsWith(bt+bt+bt))t=t.replace(new RegExp("^"+bt+"{3}(?:json)?\\s*","i"),"").replace(new RegExp(bt+"{3}\\s*$"),"");try{return JSON.parse(t)}catch(e){const a=t.indexOf("{"),b=t.lastIndexOf("}");if(a<0||b<a)throw Error("模型没有返回有效的结构化结果");return JSON.parse(t.slice(a,b+1));}}
+const PROVIDERS={
+ qwen:{endpoint:"https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",keyLink:"https://bailian.console.aliyun.com/",name:"阿里云百炼",textModel:"qwen-plus",visionModel:"qwen3-vl-plus"},
+ deepseek:{endpoint:"https://api.deepseek.com/chat/completions",keyLink:"https://platform.deepseek.com/",name:"DeepSeek",textModel:"deepseek-flash"}
+};
+function provider(){return q("ai-provider").value==="deepseek"?"deepseek":"qwen";}
+function updateProviderUI(){
+ const p=provider(),info=PROVIDERS[p],link=q("ai-key-link");
+ q("ai-key-label").textContent=info.name+" API Key（仅当前网页临时使用；不保存）";
+ link.href=info.keyLink;link.textContent="获取 "+info.name+" API Key";
+ q("ai-key").value="";
+ q("ai-provider-note").textContent=p==="qwen"?
+ "默认使用百炼北京地域 API；文字 qwen-plus，图片 qwen3-vl-plus，行情 qwen-plus 联网搜索。需国内地域的百炼密钥。":
+ "DeepSeek 仅用于文字描述整理；上传照片请改用通义千问。联网行情需切回百炼，模型本身不能替你访问商品网站。";
+ if(p!=="qwen"&&q("ai-market").style.display!=="none"){tab("parse");message("已切换到 DeepSeek，联网查价只支持百炼通义千问。");}
+}
+q("ai-provider").addEventListener("change",updateProviderUI);
 async function aiRequest(prompt,usePhoto,grounding){
- if(!navigator.onLine)throw Error("现在离线。原有账本可用，AI 功能需要联网");
- const key=T(q("ai-key").value);if(!key)throw Error("请先输入 Gemini API Key。密钥只在当前页面使用，不会保存");
- const parts=[{text:prompt}];if(usePhoto&&photo)parts.push({inline_data:{mime_type:"image/jpeg",data:photo.split(",")[1]}});
- const body={contents:[{role:"user",parts}]};
- if(grounding)body.tools=[{google_search:{}}];else body.generationConfig={responseMimeType:"application/json",temperature:0.1};
- let response;try{response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(q("ai-model").value)+":generateContent",{method:"POST",mode:"cors",headers:{"Content-Type":"application/json","x-goog-api-key":key},body:JSON.stringify(body)})}
- catch(e){throw Error("网络或浏览器未允许直连 Gemini API。可切换网络/浏览器，或使用其他正规代理方案。")}
- const data=await response.json().catch(()=>({}));if(!response.ok)throw Error("Gemini 错误 "+response.status+"："+String(data.error?.message||"请检查密钥和配额").slice(0,170));
- const cand=data.candidates?.[0];const text=(cand?.content?.parts||[]).map(x=>x.text||"").join("\n");if(!text)throw Error("AI 没有返回文字，请重试");
- return {data:parseJSON(text),cand};
+ if(!navigator.onLine)throw Error("当前没有网络。原有账本可离线使用，但 AI 功能需要联网。");
+ const p=provider(),conf=PROVIDERS[p];
+ if(p==="deepseek"&&usePhoto&&photo)throw Error("当前 DeepSeek 文字模式不能识别你上传的照片，请切换阿里云百炼。");
+ if(grounding&&p!=="qwen")throw Error("联网查价仅支持百炼 qwen-plus，请在模型服务里切换为通义千问。");
+ const key=T(q("ai-key").value);if(!key)throw Error("请先填写 "+conf.name+" 的 API Key（仅本页使用，不会存进台账）。");
+ const model=usePhoto&&photo?conf.visionModel:conf.textModel;
+ const body={model,messages:[{role:"user",content:usePhoto&&photo?[{type:"text",text:prompt},{type:"image_url",image_url:{url:photo}}]:prompt}],stream:false};
+ if(grounding){body.enable_search=true;body.search_options={enable_source:true};}
+ else if(p==="deepseek"){body.response_format={type:"json_object"};body.thinking={type:"disabled"};}
+ const controller=new AbortController(),id=setTimeout(()=>controller.abort(),65000);
+ let response;
+ try{response=await fetch(conf.endpoint,{method:"POST",mode:"cors",signal:controller.signal,headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},body:JSON.stringify(body)});}
+ catch(e){const eText=e?.name==="AbortError"?"请求超时（65秒）":"无法直连 "+conf.name+" API；可能是网络、浏览器跨域限制或接口限制。请不要把密钥发给别人。";throw Error(eText);}
+ finally{clearTimeout(id);}
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok)throw Error(conf.name+" API 返回 HTTP "+response.status+"："+String(data?.error?.message||"请核对地域、API Key、模型开通情况和配额").slice(0,170));
+ const content=data.choices?.[0]?.message?.content;
+ const text=typeof content==="string"?content:Array.isArray(content)?content.map(x=>x.text||"").join("\n"):"";
+ if(!text)throw Error("模型没有返回可用文字，请检查模型和额度。");
+ return {data:parseJSON(text),cand:data.choices?.[0],raw:data};
 }
 async function readPhoto(file){
  if(!file){photo="";return}if(file.size>12*1024*1024)throw Error("照片不能超过12MB");
@@ -99,7 +125,12 @@ async function importBlind(){
  blindPaste();if(photo){ui.images.batch=photo;updatePreview("batch");}
  mask.classList.remove("open");message("请在盲盒表单确认整盒实付、总数、品相后再正式入库。");
 }
-function sourced(c){return (c?.groundingMetadata?.groundingChunks||[]).map(x=>({url:x.web?.uri||"",title:x.web?.title||""})).filter(x=>/^https:\/\//.test(x.url))}
+function sourced(candidate,raw){
+ const outputs=[...(candidate?.groundingMetadata?.groundingChunks||[]).map(x=>({url:x.web?.uri||"",title:x.web?.title||""})),
+ ...(raw?.search_info?.search_results||[]).map(x=>({url:x.url||"",title:x.title||""})),
+ ...(raw?.output?.search_info?.search_results||[]).map(x=>({url:x.url||"",title:x.title||""}))];
+ return outputs.filter(x=>/^https:\/\//.test(x.url));
+}
 function safeURL(s){try{const u=new URL(s);return u.protocol==="https:"?u.href:""}catch(e){return ""}}
 async function search(){
  const names=[...new Set(q("ai-names").value.split(/[\n，,、；;]/).map(T).filter(Boolean))];if(!names.length)throw Error("请填写品类");if(names.length>8)throw Error("每次最多查8个品类，以免浪费搜索额度");
@@ -110,9 +141,9 @@ async function search(){
  "输出纯 JSON：{\"items\":[{\"category\":\"\",\"low\":null,\"high\":null,\"date\":\"\",\"sourceUrl\":\"\",\"sourceTitle\":\"\",\"confidence\":\"低\",\"note\":\"\"}]}。low/high为数字或null；找不到有依据的元/g报价时null，解释原因。",
  "查询品类："+names.join("、")
  ].join("\n");
- const {data,cand}=await aiRequest(prompt,false,true);
+ const {data,cand,raw}=await aiRequest(prompt,false,true);
  if(!Array.isArray(data.items))throw Error("AI未返回可解析的行情结果");
- const sources=sourced(cand);
+ const sources=sourced(cand,raw);
  quotes=data.items.filter(x=>names.includes(T(x.category))).slice(0,8).map((x,i)=>{
   const low=Number(x.low),high=Number(x.high),url=safeURL(x.sourceUrl);
   return {id:i,category:T(x.category),low,high,url,date:T(x.date),sourceTitle:T(x.sourceTitle),note:T(x.note),verified:x.low!==null&&x.high!==null&&low>0&&high>=low&&high<100000&&sources.some(s=>s.url===url)};
