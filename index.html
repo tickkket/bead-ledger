@@ -405,7 +405,25 @@ function exportTsv(){downloadFile('\ufeff'+makeTsv(),'饰品台账_表格_'+toda
 async function copyTsv(){const val=makeTsv('materials');try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(val)}else throw Error('使用后备复制');toast('物料表格已复制，可直接粘贴到 Excel')}catch(e){const ta=document.createElement('textarea');ta.value=val;ta.style.position='fixed';ta.style.opacity='0';document.body.append(ta);ta.select();const success=document.execCommand('copy');ta.remove();toast(success?'物料表格已复制':'复制被浏览器限制，请使用 TSV 导出')}}
 function restoreForm(){const body=`<div class="warning">恢复备份会<b>完整替换</b>当前所有物料、成品、行情、销售和设置。为避免覆盖错误，请先导出现在的 JSON 备份。</div><div class="field" style="margin-top:14px"><label>选择以前导出的完整 JSON 文件</label><input id="restore-file" class="input" type="file" accept=".json,application/json"></div><div class="info" style="margin-top:12px">只接受本工具导出的完整备份格式；表格 TSV 不能用于恢复。</div>`;openModal('导入并恢复本地账本',body,'save-restore','校验并替换全部数据')}
 async function restoreBackup(){const input=$('#restore-file'),file=input?.files?.[0];required(file,'请先选择备份文件');required(file.size<100*1024*1024,'备份文件超过 100MB，请检查');const txt=await file.text();let obj;try{obj=JSON.parse(txt)}catch(e){throw Error('文件不是有效的 JSON')};required(obj?.app==='饰品摆摊小账本'&&obj?.backupVersion===1,'文件不是本工具可识别的完整备份');for(const key of ['materials','products','markets','sales','batches'])required(Array.isArray(obj.data?.[key]),`备份缺少 ${key} 数据`);const imported=normalize(obj.data);for(const p of imported.products){required(['hand','out'].includes(p.type),'备份包含未知成品类别');if(p.type==='hand')for(const c of p.components||[])required(!!byId(imported.materials,c.id),'备份的手作配方引用缺失物料')}for(const s of imported.sales)required(!!byId(imported.products,s.productId),'备份销售记录存在未找到的成品');if(!confirm('确定以备份内容完全覆盖当前本地账本？此操作不可撤销（除非你另有备份）。'))return;await commit(()=>{state=imported;ui.tab='home'},'完整备份已恢复')}
-async function shrinkImage(file){required(file.type.startsWith('image/'),'请选择图片文件');required(file.size<=20*1024*1024,'单张图片不能超过20MB');const buffer=await file.arrayBuffer();const blob=new Blob([buffer],{type:file.type});let bitmap;try{bitmap=await createImageBitmap(blob)}catch(e){throw Error('图片格式不支持，请尝试 JPG/PNG/WebP')};const max=1000,scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();return canvas.toDataURL('image/jpeg',0.7)}
+async function shrinkImage(file){
+ required(file&&file.type.startsWith('image/'),'请选择图片文件');
+ required(file.size<=20*1024*1024,'单张图片不能超过20MB');
+ let img=null,bitmap=null,url='';
+ try{
+  if(typeof createImageBitmap==='function'){try{bitmap=await createImageBitmap(file)}catch(e){}}
+  if(!bitmap){
+   url=URL.createObjectURL(file);
+   img=await new Promise((resolve,reject)=>{const node=new Image();node.onload=()=>resolve(node);node.onerror=()=>reject(Error('此手机无法读取该图片格式，请使用 JPG 或 PNG'));node.src=url});
+  }
+  const image=bitmap||img,w=image.width||image.naturalWidth,h=image.height||image.naturalHeight;
+  required(w>0&&h>0,'图片尺寸无效');
+  const factor=Math.min(1,1000/Math.max(w,h));const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(w*factor));canvas.height=Math.max(1,Math.round(h*factor));
+  const ctx=canvas.getContext('2d');required(ctx,'此浏览器无法压缩照片');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);
+  return canvas.toDataURL('image/jpeg',0.7);
+ }finally{bitmap?.close?.();if(url)URL.revokeObjectURL(url)}
+}
 function updatePreview(key){const el=document.querySelector('[data-preview="'+key+'"]');if(el){el.src=safeImage(ui.images[key])||svgThumb('图');el.style.display='block'}}
 function handleAction(action,btn){const id=btn.dataset.id;
  switch(action){case 'go-settings':ui.tab='settings';ui.search='';render();break;
