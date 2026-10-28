@@ -40,7 +40,7 @@ function tab(t){q("ai-parse").style.display=t==="parse"?"":"none";q("ai-market")
 function parseJSON(s){let t=String(s||"").trim();const bt=String.fromCharCode(96);if(t.startsWith(bt+bt+bt))t=t.replace(new RegExp("^"+bt+"{3}(?:json)?\\s*","i"),"").replace(new RegExp(bt+"{3}\\s*$"),"");try{return JSON.parse(t)}catch(e){const a=t.indexOf("{"),b=t.lastIndexOf("}");if(a<0||b<a)throw Error("模型没有返回有效的结构化结果");return JSON.parse(t.slice(a,b+1));}}
 const PROVIDERS={
  qwen:{endpoint:"https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",keyLink:"https://bailian.console.aliyun.com/",name:"阿里云百炼",textModel:"qwen-plus",visionModel:"qwen3-vl-plus"},
- deepseek:{endpoint:"https://api.deepseek.com/chat/completions",keyLink:"https://platform.deepseek.com/",name:"DeepSeek",textModel:"deepseek-flash"}
+ deepseek:{endpoint:"https://api.deepseek.com/chat/completions",keyLink:"https://platform.deepseek.com/",name:"DeepSeek",textModel:"deepseek-chat"}
 };
 function provider(){return q("ai-provider").value==="deepseek"?"deepseek":"qwen";}
 function updateProviderUI(){
@@ -62,8 +62,8 @@ async function aiRequest(prompt,usePhoto,grounding){
  const key=T(q("ai-key").value);if(!key)throw Error("请先填写 "+conf.name+" 的 API Key（仅本页使用，不会存进台账）。");
  const model=usePhoto&&photo?conf.visionModel:conf.textModel;
  const body={model,messages:[{role:"user",content:usePhoto&&photo?[{type:"text",text:prompt},{type:"image_url",image_url:{url:photo}}]:prompt}],stream:false};
- if(grounding){body.enable_search=true;body.search_options={enable_source:true};}
- else if(p==="deepseek"){body.response_format={type:"json_object"};body.thinking={type:"disabled"};}
+ if(grounding){body.enable_search=true;body.search_options={search_strategy:"turbo"};}
+ else if(p==="deepseek"){body.response_format={type:"json_object"};}
  const controller=new AbortController(),id=setTimeout(()=>controller.abort(),65000);
  let response;
  try{response=await fetch(conf.endpoint,{method:"POST",mode:"cors",signal:controller.signal,headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},body:JSON.stringify(body)});}
@@ -146,15 +146,15 @@ async function search(){
  const sources=sourced(cand,raw);
  quotes=data.items.filter(x=>names.includes(T(x.category))).slice(0,8).map((x,i)=>{
   const low=Number(x.low),high=Number(x.high),url=safeURL(x.sourceUrl);
-  return {id:i,category:T(x.category),low,high,url,date:T(x.date),sourceTitle:T(x.sourceTitle),note:T(x.note),verified:x.low!==null&&x.high!==null&&low>0&&high>=low&&high<100000&&sources.some(s=>s.url===url)};
+  return {id:i,category:T(x.category),low,high,url,date:T(x.date),sourceTitle:T(x.sourceTitle),note:T(x.note),verified:x.low!==null&&x.high!==null&&low>0&&high>=low&&high<100000&&Boolean(url)&&/^https:\/\//.test(url)};
  });
- q("ai-quotes").innerHTML=quotes.map(x=>'<div><label style="display:block"><input type="checkbox" data-quote="'+x.id+'" '+(x.verified?'':'disabled')+'> <strong>'+E(x.category)+'</strong> '+(x.verified?'¥'+x.low.toFixed(2)+'～'+x.high.toFixed(2)+'/g':'没有可核验的元/g批发报价')+'</label><div>来源：'+(x.url?'<a href="'+E(x.url)+'" target="_blank" rel="noopener noreferrer">'+E(x.sourceTitle||x.url)+'</a>':'缺失')+'</div><div>时间：'+E(x.date||"未知")+' · '+E(x.note)+'</div><div>'+(x.verified?'请点开来源核对后再勾选':'来源未在模型搜索结果中对应，无法写入')+'</div></div>').join("");
- message("已检索。可供核对的参考价格 "+quotes.filter(x=>x.verified).length+" 条。价格必须由你人工确认才会更新台账。");
+ q("ai-quotes").innerHTML=quotes.map(x=>'<div><label style="display:block"><input type="checkbox" data-quote="'+x.id+'" '+(x.verified?'':'disabled')+'> <strong>'+E(x.category)+'</strong> '+(x.verified?'¥'+x.low.toFixed(2)+'～'+x.high.toFixed(2)+'/g':'无可用的元/g价格或参考链接')+'</label><div>来源：'+(x.url?'<a href="'+E(x.url)+'" target="_blank" rel="noopener noreferrer">'+E(x.sourceTitle||x.url)+'</a>':'缺失')+'</div><div>时间：'+E(x.date||"未知")+' · '+E(x.note)+'</div><div>'+(x.verified?'模型提供的来源未经独立验证。必须打开链接，确认页面确实有相同规格的批发元/g报价后才能勾选':'缺少完整参考价格或 HTTPS 链接，无法写入')+'</div></div>').join("");
+ message("已检索。可供核对的参考价格 "+quotes.filter(x=>x.verified).length+" 条。所有候选链接由 AI 提供，可能错误。请先打开真实商家页面确认品类、品相、单位、时间和报价，再勾选写入。");
 }
 async function apply(){
  const picked=[...document.querySelectorAll("[data-quote]:checked")].map(e=>Number(e.dataset.quote)),toSave=quotes.filter(x=>picked.includes(x.id)&&x.verified);
  if(!toSave.length)throw Error("请先核对来源并勾选要采用的价格");
- if(!confirm("确定已查看原始来源，确认是可比的散珠批发元/克价格吗？\n更新行情不会改动历史采购成本。"))return;
+ if(!confirm("注意：AI给出的来源可能不真实。你是否已经打开原始来源，确认品类、日期和人民币/克的批发报价一致？\n确认后才会更新行情，不修改历史成本。"))return;
  await commit(()=>{
   if(!Array.isArray(state.marketHistory))state.marketHistory=[];
   for(const x of toSave){
