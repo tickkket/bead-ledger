@@ -34,13 +34,35 @@
 .material-list-compact .stock-extra summary{cursor:pointer}
 .material-list-compact .side .btn.small{padding:6px 9px;font-size:11px}
 @media(min-width:700px){#editor .form-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+</style><style id="balanced-materials-v26">
+/* Keep paired short fields, but stop squeezing names, category lists and sources. */
+#editor.balanced-material-form .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:11px 12px!important}
+#editor.balanced-material-form .form-grid>.field.balanced-wide{grid-column:1/-1}
+#editor.balanced-material-form .form-grid>.field.wide{grid-column:1/-1}
+#editor.balanced-material-form .field label{font-size:12px;line-height:1.5;margin-bottom:5px}
+#editor.balanced-material-form .field .input,#editor.balanced-material-form .field .select,#editor.balanced-material-form .field .textarea{font-size:14px;min-height:44px;padding:9px 10px}
+#editor.balanced-material-form .field .hint{font-size:11px;line-height:1.55;margin-top:5px}
+#editor.balanced-material-form .material-picture{margin-top:13px}
+#editor.balanced-material-form .material-picture .picture-tools{gap:9px}
+#editor.balanced-material-form .material-picture .picture-tools button{font-size:12px;min-height:39px}
+.material-list-compact .item{grid-template-columns:54px minmax(0,1fr);gap:9px 11px;padding:12px}
+.material-list-compact .item>.thumb{width:53px;height:53px}
+.material-list-compact .item-title{font-size:14px;line-height:1.45}
+.material-list-compact .stock-detail-grid{gap:6px 9px;margin:9px 0;font-size:12px}
+.material-list-compact .stock-detail-grid span{padding:6px 7px;line-height:1.45}
+.material-list-compact .stock-detail-grid .stock-long{grid-column:1/-1}
+.material-list-compact .stock-extra{font-size:12px;line-height:1.6}
+.material-list-compact .side{padding-top:2px}
+.material-list-compact .side .btn.small{font-size:12px;min-height:34px;padding:7px 10px}
+@media(min-width:700px){#editor.balanced-material-form .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media(max-width:350px){#editor.balanced-material-form .form-grid{grid-template-columns:minmax(0,1fr)!important}#editor.balanced-material-form .form-grid>.field{grid-column:1/-1}}
 </style></head>
 <body>
 <div id="app" class="shell"></div><div id="modal-root"></div><div id="toast-root"></div>
 <script>
 'use strict';
 // 本地账本核心无网络请求；PWA shell 另行缓存。金额内部用数值，展示时保留两位小数；原始用量保持最多四位小数。
-const APP_VERSION=17, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
+const APP_VERSION=18, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
 const uid=()=>('i'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 const round=(v,d=4)=>Math.round((Number(v)+Number.EPSILON)*10**d)/10**d;
@@ -256,7 +278,7 @@ const stockSummary=m=>{
  const values=m.kind==='bead'?
  [['类型',BEAD_PURCHASE_LABEL[beadPurchaseTypeOf(m)]||'未标注'],['分类',ensureStoneClass(m.beadGroup,m.subtype||m.name)],['形状',m.shape||'未填'],['规格',m.spec||'未填'],['库存',fmt(m.qty)+' '+(m.unit||'颗')],['成本',money(m.unitCost)+'/'+(m.unit||'颗')],['渠道',m.source||'未填']]:
  [['类别',kindName[m.kind]||m.kind],['库存',fmt(m.qty)+' '+(m.unit||'个')],['成本',money(m.unitCost)],['渠道',m.source||'未填']];
- const chips=values.map(([k,v])=>'<span><b>'+esc(k)+'：</b>'+esc(v)+'</span>').join('');
+ const chips=values.map(([k,v])=>'<span class="'+(['类型','分类','渠道'].includes(k)||String(v).length>18?'stock-long':'')+'"><b>'+esc(k)+'：</b>'+esc(v)+'</span>').join('');
  const extra=[m.notes,m.flaw&&'品相 '+m.flaw,m.wholesaleRange&&'批发 '+m.wholesaleRange,m.stallRange&&'建议 '+m.stallRange,m.onlineRange&&'线上 '+m.onlineRange].filter(Boolean).join(' · ');
  return '<div class="stock-detail-grid">'+chips+'</div>'+(extra?'<details class="stock-extra"><summary>更多备注与参考价格</summary>'+esc(extra)+'</details>':'');
 };
@@ -292,6 +314,16 @@ function mainContent(){return ({home:tabHome,materials:tabMaterials,products:tab
 function render(){const tabs=[['home','⌂','首页'],['materials','◈','物料'],['products','✧','成品'],['markets','↗','行情'],['sales','▤','账本']];$('#app').innerHTML=`<div class="top"><div class="brand"><div class="logo">✳</div><div><h1>饰品摆摊小账本</h1><small>本地离线 · 私人进货与定价</small></div></div><button class="btn small" data-action="go-settings">⚙ 设置 & 备份</button></div><nav class="nav">${[...tabs,['settings','⚙','设置']].map(([k,icon,label])=>`<button class="${ui.tab===k?'active':''}" data-tab="${k}">${icon} ${label}</button>`).join('')}</nav><main>${mainContent()}</main><div class="bottom">${tabs.map(([k,icon,label])=>`<button class="${ui.tab===k?'active':''}" data-tab="${k}"><span>${icon}</span>${label}</button>`).join('')}</div>`;$('#modal-root').innerHTML=ui.modal||''}
 function openModal(title,body,onSave='save-material',saveLabel='保存'){ui.images={};ui.modal=`<div class="modalwrap"><div class="modal" role="dialog" aria-modal="true" aria-label="${attr(title)}"><div class="modal-head"><h3>${esc(title)}</h3><button class="btn small" data-action="close-modal" aria-label="关闭">✕</button></div><div class="modal-body"><form id="editor" autocomplete="off">${body}</form></div><div class="modal-foot"><button class="btn" data-action="close-modal">取消</button><button class="btn primary" data-action="${onSave}">${esc(saveLabel)}</button></div></div></div>`;render()}
 function closeModal(){ui.modal=null;ui.images={}}
+function setMaterialFormBalance(){
+ const editor=$('#editor');if(!editor)return;
+ editor.classList.add('balanced-material-form');
+ // Long selects, category/shape searches and text fields need the full width to be usable on a phone.
+ const wideNames=new Set(['name','purchaseType','beadGroup','subtype','shape','sourceChannel','sourceDetail','flaw','notes']);
+ for(const field of editor.querySelectorAll('.form-grid > .field')){
+  const input=field.querySelector('input[name],select[name],textarea[name]');
+  if(input&&wideNames.has(input.name))field.classList.add('balanced-wide');
+ }
+}
 function materialForm(id=null,forced='bead'){
  const m=id?byId(state.materials,id):null;const kind=m?.kind||forced;ui.images={main:m?.image||''};const opt=[['bead','珠子 / 天然石 / 珍珠 / 香木'],['metal','金属基础配件'],['supply','耗材 / 包装'],['tool','工具']];let body=`<input type="hidden" name="id" value="${attr(id||'')}"><div class="form-grid">${sel('kind','类别',kind,opt)}${field('name','名称',m?.name||'',{required:true,placeholder:'例：白水晶散珠 / 龙虾扣'})}`;
  if(kind==='bead')body+=`${sel('purchaseType','物料类型（可修改）',m?beadPurchaseTypeOf(m):'loose',[['','请选择具体物料类型'],...BEAD_PURCHASE_TYPES])}${sel('beadGroup','散珠分类',ensureStoneClass(m?.beadGroup,m?.subtype||m?.name),groupOpts)}${beadCategoryField('subtype','珠子品类',m?.subtype||'',ensureStoneClass(m?.beadGroup,m?.subtype||m?.name))}${beadShapeField('shape','形状 / 珠型（可搜索）',m?.shape||'',m?.beadGroup,m?.subtype,m?.name)}${field('spec','卡数：珠子尺寸 / 规格',m?.spec||'',{placeholder:'例：8mm / 10卡'})}${num('weight','单颗克重（g；可不填）',m?.weight||'')}${sel('grade','品相档位',m?.grade||gradeFromText(m?.flaw),GRADES)}${field('flaw','具体瑕疵备注',m?.flaw||'')}${field('wholesaleRange','批发参考克价区间（元/g）',m?.wholesaleRange||'',{placeholder:'例：3.5~5元/g'})}${field('stallRange','摆摊建议售价区间（元/颗）',m?.stallRange||'',{placeholder:'例：7–9元'})}${field('onlineRange','线上零售参考区间（元/颗）',m?.onlineRange||'',{placeholder:'例：12~16元'})}${field('costHint','原表单颗成本参考',m?.costHint||'',{placeholder:'仅核对，不改变实际成本'})}<div class="field wide info" data-market-estimate></div>${num('suggestedPrice','自主定价（元，可留空）',m?.suggestedPrice||'')}`;
@@ -299,7 +331,7 @@ function materialForm(id=null,forced='bead'){
  else body+=`${num('qty',kind==='bead'?'当前颗数':'当前库存数量',m?.qty??1,{min:0})}${sel('unit','库存单位',m?.unit||(kind==='bead'?'颗':'个'),[['颗','颗'],['串','串'],['个','个'],['件','件'],['米','米'],['厘米','厘米'],['克','克'],['毫升','毫升'],['包','包'],['卷','卷'],['套','套']])}${sel('costMode','进价计算方式',kind==='metal'?'unit':'total',[['total','按购入总价计算'],['unit','按单颗 / 单位进价计算']])}${num('unitPrice','单颗 / 单位进价（元）',m?.unitCost??'',{step:'any',hint:'金属配件可直接填写单个进价'})}${num('totalPrice','这批实际购入总价（元）',m?round(n(m.unitCost)*n(m.initialQty??m.qty),4):'',{step:'any'})}<div class="field wide"><div class="info">根据上面的「进价计算方式」选择其中一项为准；另一项仅作参考，保存时自动核算。编辑当前库存不会改变原批初始数量。${m?.batchId?'此条来自盲盒，成本已锁定。':''}</div></div>`;
  body+=`${sourceField('source',m?.source||'')}${field('purchaseDate','进货日期',m?.purchaseDate||today(),{type:'date'})}${field('notes','自定义备注',m?.notes||'',{type:'textarea',wide:true})}`;
  body+=`</div>${imageField('main')}<div class="info" style="margin-top:10px">${kind==='bead'?'福利珠只能通过盲盒模式创建，以保留成本分摊记录。':''}补货时推荐新增一条进货记录，而不是直接覆盖旧价格。</div>`;
- openModal(m?'编辑物料':'新增物料',body,'save-material');ui.images={main:m?.image||''};ui.modal=ui.modal.replace('src="'+svgThumb('图')+'"','src="'+(safeImage(ui.images.main)||svgThumb('图'))+'"');render();refreshMarketEstimates();
+ openModal(m?'编辑物料':'新增物料',body,'save-material');ui.images={main:m?.image||''};ui.modal=ui.modal.replace('src="'+svgThumb('图')+'"','src="'+(safeImage(ui.images.main)||svgThumb('图'))+'"');render();setMaterialFormBalance();refreshMarketEstimates();
 }
 function blindRow(r={},i=0){const group=ensureStoneClass(r.beadGroup,r.subtype||r.name);return `<div class="line-entry" data-blind-row="${i}"><div class="flex" style="justify-content:space-between"><div class="line-title">优选珠 ${i+1}</div><button type="button" class="btn small danger" data-action="remove-blind-row" data-index="${i}">移除</button></div><div class="form-grid">${field('b-name','名称',r.name||'',{placeholder:'例：葡萄石圆珠'})}${sel('b-group','散珠分类',group,groupOpts)}${beadCategoryField('b-subtype','珠子品类',r.subtype||'',group)}${beadShapeField('b-shape','形状 / 珠型（可搜索）',r.shape||detectBeadShape(r.name,group,r.subtype,r.name),group,r.subtype,r.name)}${field('b-spec','卡数 / 尺寸规格',r.spec||'',{placeholder:'例：8mm / 10卡'})}${num('b-weight','单颗克重（g）',r.weight??'')}${sel('b-grade','品相档位',r.grade||gradeFromText(r.flaw),GRADES)}${field('b-flaw','瑕疵备注',r.flaw||'')}${num('b-manual','手动分摊成本（元）',r.manualCost??'',{hint:'仅手动成本分摊时填写'})}${field('b-market-range','批发克价参考（元/g，可填区间）',r.wholesaleRange||'',{placeholder:'3.5~5元/g'})}${field('b-stall-range','摆摊建议售价（元/颗）',r.stallRange||'',{placeholder:'7–9元'})}${field('b-online-range','线上零售参考（元/颗）',r.onlineRange||'',{placeholder:'12~16元'})}${field('b-ref-cost','原表成本参考（仅对照）',r.costHint||'',{placeholder:'≈2.49元；不作为入库成本'})}<div class="field wide info" data-market-estimate></div></div><div class="field" style="margin-top:8px"><label>本颗照片（可留空）</label><input type="file" class="input" accept="image/*" data-image="blind-${i}"><img data-preview="blind-${i}" alt="本颗预览" class="image-preview" style="margin-top:6px;${ui.images['blind-'+i]?'':'display:none'}" src="${safeImage(ui.images['blind-'+i])||svgThumb('图')}"></div></div>`}
 function blindForm(){ui.blindRows=[{}];ui.images={};const body=`<div class="warning">整盒成本只分摊给优选珠；福利珠成本记为0。市场估值依据你导入的批发克价区间（若无则用「行情」）×品相档位×实际克重计算；原表的建议售价保留作对照，非自动实际售价。</div><div class="form-grid" style="margin-top:12px">${field('title','盲盒批次名称','',{required:true,placeholder:'例：10月28日直播盲盒'})}${num('total','盲盒实付总成本（元）','',{required:true})}${num('totalQty','盲盒总颗数','',{required:true,min:1,step:1})}${sourceField('source','')}${sel('split','成本分摊方式','even',[['even','优选珠平均分摊'],['manual','逐颗手动分摊']])}${field('date','进货日期',today(),{type:'date'})}${field('welfareName','未分类福利珠名称','盲盒福利珠')}${field('notes','整盒备注','',{wide:true,type:'textarea'})}</div>${imageField('batch','整盒盲盒图片 / 采购截图')}<div class="line-entry"><div class="flex" style="justify-content:space-between"><b>一键导入盲盒分类明细</b><button type="button" class="btn small primary" data-action="parse-blind-table">识别并填入表单</button></div><p class="sub" style="margin:6px 0">支持粘贴 Excel/WPS 表格、CSV/TSV文本，或选择 CSV/TSV/TXT 文件。支持你发来的八列表头：编号、品类、卡数、棉裂/品相情况、盲盒分摊单颗成本、市面批发克价参考、摆摊建议售价、线上市面零售价参考。也兼容数量、优选/福利、克重等列。未写数量默认每行一颗优选珠。</p><textarea class="textarea" name="blindTable" style="min-height:135px" placeholder="类别,名称,品类,卡数,克数,品相,数量,类型
