@@ -176,7 +176,7 @@ function parseQuick(raw){
  if(total===null||!Number.isFinite(total)||total<0)throw Error("没有明确识别到实际购入价。可说“进价29块”“花了29元”或“29买的”等。");
  if(count!==null&&(!Number.isInteger(count)||count<1||count>10000))throw Error("颗数不在合理范围，请核对");
  const descriptor=length?length[1]+"cm":null;
- return {category,total,count,approx,size,length:descriptor,strandCount:strandCount||1,raw:T(raw),source:(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||""};
+ return {category,shape:detectBeadShape(text,inferStoneClass(category),category,category),total,count,approx,size,length:descriptor,strandCount:strandCount||1,raw:T(raw),source:(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||""};
 }
 function quickPreview(){
  const p=parseQuick($("local-desc").value);meta.quick=p;
@@ -205,7 +205,7 @@ async function saveQuick(){
  if(mode!=="beads"&&mode!=="strands")throw Error("请选库存单位");
  const unit=mode==="beads"?"颗":"串";
  const notes=[p.strandCount+"串半成品珠串",p.length?"串长 "+p.length:"",p.size?"珠径 "+p.size:"",p.count?"口述约 "+p.count+"颗":"",p.approx?"颗数估算，未逐颗清点":"",p.raw].filter(Boolean).join("；");
- const data={id:uid(),kind:"bead",name:p.category+"半成品珠串",beadGroup:inferStoneClass(p.category),subtype:p.category,spec:[p.size,p.length].filter(Boolean).join(" · "),weight:0,grade:"普通",flaw:"",qty,initialQty:qty,unit,unitCost:round(total/qty,8),totalPurchaseCost:total,qtyApprox:mode==="beads"&&p.approx,approxBeadCount:p.count||null,strandLengthCm:p.length?Number(p.length.replace("cm","")):null,strandCount:p.strandCount,purchaseDate:today(),source:T($("quick-source").value),notes,image:"",createdAt:new Date().toISOString(),isWelfare:false};
+ const data={id:uid(),kind:"bead",name:p.category+"半成品珠串",beadGroup:inferStoneClass(p.category),subtype:p.category,shape:p.shape||"",spec:[p.size,p.length].filter(Boolean).join(" · "),weight:0,grade:"普通",flaw:"",qty,initialQty:qty,unit,unitCost:round(total/qty,8),totalPurchaseCost:total,qtyApprox:mode==="beads"&&p.approx,approxBeadCount:p.count||null,strandLengthCm:p.length?Number(p.length.replace("cm","")):null,strandCount:p.strandCount,purchaseDate:today(),source:T($("quick-source").value),notes,image:"",createdAt:new Date().toISOString(),isWelfare:false};
  if(!confirm("确定以 "+qty+unit+" 入库「"+data.name+"」？本批实付 ¥"+total.toFixed(2)+"，单位成本约 ¥"+(total/qty).toFixed(4)+"。"+(data.qtyApprox?"\n⚠ 颗数为估算，建议清点后盘点调整。":"")))return;
  await commit(()=>{state.materials.push(data);usageAdd([data])},"已快速入库："+qty+unit+" "+data.name);
  shade.classList.remove("open");
