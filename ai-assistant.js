@@ -19,7 +19,7 @@ shade.innerHTML=[
 '<textarea id="local-desc" class="local-field" placeholder="今天小红书盲盒实付28元，共12颗，挑出8颗优选。黄水晶卡17无棉无裂1颗，黑发晶卡10微棉2颗，剩下4颗是福利珠……"></textarea>',
 '<div class="local-row"><button class="local-btn main" data-local="parse">整理成表格</button><button class="local-btn" data-local="copy">复制表格</button><button class="local-btn" data-local="import">填入盲盒</button></div>',
 '<label>或者上传表格截图（免费本机 OCR）</label><input id="local-photo" class="local-field" type="file" accept="image/*">',
-'<div class="local-row"><button class="local-btn" data-local="ocr">识别图片文字</button><span class="local-help">首次使用需加载约数 MB 的 OCR 文件，加载完成并缓存后可尝试离线使用。复杂表格可能错列。</span></div>',
+'<div class="local-row"><button class="local-btn" data-local="ocr">识别图片文字</button><span class="local-help">首次需联网下载开源 OCR 文件；以后能否离线识别取决于缓存。国内网络可能无法访问组件 CDN；复杂表格要人工校对。</span></div>',
 '<label>识别 / 整理结果（可编辑，再确认入库）</label>',
 '<textarea id="local-tsv" class="local-field" spellcheck="false" placeholder="标准格式的制表符表格将在这里显示"></textarea>',
 '<div id="local-parsed" class="local-result"></div>',
@@ -137,26 +137,23 @@ function importToLedger(){
  say("已填入盲盒表单。确认整盒总价、总数与优选/福利后再入库。");
 }
 async function ocrImage(){
- if(!photoFile)throw Error("请先上传截图");
- say("准备本地文字识别，首次加载模型可能比较慢；图片不会上传服务器。");
+ if(!photoFile)throw Error("请先上传清晰的截图");
+ say("正在准备免费 OCR：首次使用需联网加载开源识别程序和中文模型，费用为0元；以后能否离线识别取决于浏览器缓存。图片在手机本机处理，不会上传给识别服务。");
  if(!window.Tesseract){
-  const r=await fetch("./ocr/tesseract.min.js",{method:"GET"}).catch(()=>null);
-  if(!r?.ok)throw Error("本地 OCR 资源尚未就绪。文字输入与 Excel 表格仍可正常使用。");
-  const script=document.createElement("script");script.src="./ocr/tesseract.min.js";
-  await new Promise((ok,fail)=>{script.onload=ok;script.onerror=()=>fail(Error("OCR 程序加载失败"));document.head.append(script)});
+  if(!navigator.onLine)throw Error("首次使用截图识别需要联网下载 OCR 组件。文字及表格导入无需联网。");
+  const script=document.createElement("script");
+  script.src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+  await new Promise((ok,fail)=>{script.onload=ok;script.onerror=()=>fail(Error("当前网络无法加载开源 OCR；国内网络访问此 CDN 可能不稳定。仍可复制表格文字直接导入。"));document.head.append(script);});
  }
  const worker=await window.Tesseract.createWorker("chi_sim+eng",1,{
-  workerPath:new URL("./ocr/worker.min.js",location.href).href,
-  corePath:new URL("./ocr/",location.href).href,
-  langPath:new URL("./ocr/",location.href).href,
-  logger:m=>{if(m.progress!==undefined)say("本地 OCR："+Math.round(m.progress*100)+"% · "+m.status)}
+   logger:m=>{if(m.progress!==undefined)say("本地 OCR："+Math.round(m.progress*100)+"% · "+m.status);}
  });
  try{
   const output=await worker.recognize(photoFile),text=T(output.data.text);
-  if(!text)throw Error("未识别到文字，建议使用清晰、正面且表格字较大的截图");
+  if(!text)throw Error("没识别出文字，请换正面清晰的截图");
   $("local-desc").value=text;
-  $("local-parsed").textContent="已识别截图文字，先核对文字和数字，再点击“整理成表格”。OCR可能将卡数、价格或表格列识别错。";
-  tab("text");say("截图文字已提取至描述框。本地完成，不使用付费 API。");
+  $("local-parsed").textContent="已识别截图内容。请逐列核对文字、卡数和单价，再点整理成表格。";
+  tab("text");say("文字已在设备端提取，并填入描述框。未调用任何付费 AI API。");
  }finally{await worker.terminate();}
 }
 function canonical(s){return T(s).replace(/（[^）]*）|\([^)]*\)/g,"").toLowerCase();}
