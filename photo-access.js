@@ -60,6 +60,6 @@ async function blobToData(blob){
   return canvas.toDataURL("image/jpeg",0.7);
  }finally{URL.revokeObjectURL(url)}
 }
-document.addEventListener("visibilitychange",()=>{if(document.hidden&&host)stop();});
+// Camera closes when the user taps cancel or finishes shooting.
 window.BeadPhotoAccess={camera,clipboard,stop};
 })();
