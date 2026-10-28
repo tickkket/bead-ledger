@@ -102,7 +102,7 @@ function refreshValuePreview(){
  const e=q("daily-value-preview");if(!e)return;
  const value=marketValuePerStockUnit();
  const unit=q("daily-unit")?.value||"颗";
- e.textContent=value!==null?"按已有克价估算：¥"+value.toFixed(2)+"/"+unit+"（仅参考）":"暂无可用估值，可手动填写";
+ e.innerHTML=value!==null?'按已有克价估算：¥'+value.toFixed(2)+'/'+unit+' <button type="button" class="local-btn" data-daily="use-estimate" style="padding:4px 8px;font-size:12px">填入估算值</button>':'暂无可用估值，可手动填写';
 }
 function priceInputValue(id,label){
  const raw=q(id)?.value?.trim()??"";
@@ -158,7 +158,13 @@ q("local-daily").addEventListener("click",e=>{
   operation.catch(err=>{q("daily-image-status").textContent=err.message||String(err);});
   return;
  }
- if(a==="edit-photo"){
+ if(a==="use-estimate"){
+  const estimate=marketValuePerStockUnit();
+  if(estimate!==null)q("daily-actual-value").value=Number(estimate.toFixed(4));
+  else q("daily-value-preview").textContent="暂无可用行情估值";
+  return;
+ }
+  if(a==="edit-photo"){
   if(!imageData){q("daily-image-status").textContent="请先添加图片";return;}
   imageBusy=true;
   window.BeadPhotoEditor.open(imageData).then(edited=>{
