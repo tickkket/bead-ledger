@@ -30,7 +30,7 @@ shade.innerHTML=[
 '<div class="local-row"><div class="local-narrow"><label>品类</label><input id="local-kind" class="local-field" list="local-categories" placeholder="例：黄水晶"></div><div class="local-narrow"><label>品相</label><select id="local-grade" class="local-field"><option value="优选">优选</option><option value="精品">精品</option><option value="普通">普通</option><option value="瑕疵">瑕疵</option></select></div></div>',
 '<datalist id="local-categories"></datalist>',
 '<div class="local-row"><div class="local-narrow"><label>参考克价最低（元/g）</label><input id="local-low" class="local-field" type="number" min="0.01" step="any" placeholder="3.5"></div><div class="local-narrow"><label>参考克价最高（元/g）</label><input id="local-high" class="local-field" type="number" min="0.01" step="any" placeholder="5"></div></div>',
-'<div class="local-row"><div class="local-narrow"><label>来源/平台（必填）</label><input id="local-source" class="local-field" list="local-sources" placeholder="例：1688 某家店"></div><div class="local-narrow"><label>报价日期</label><input id="local-date" type="date" class="local-field"></div></div>',
+'<div class="local-row"><div class="local-narrow"><label>来源渠道 *</label><select id="local-source-channel" class="local-field">'+purchaseSourceOptions()+'</select><input id="local-source-detail" class="local-field" placeholder="具体店铺 / 直播间"></div><div class="local-narrow"><label>报价日期</label><input id="local-date" type="date" class="local-field"></div></div>',
 '<datalist id="local-sources"><option value="小红书"></option><option value="淘宝"></option><option value="拼多多"></option><option value="1688"></option><option value="线下批发"></option><option value="采购实付"></option></datalist>',
 '<label>报价链接或可核对的原始依据（可留空）</label><input id="local-url" class="local-field" placeholder="https://... / 订单编号或截图描述">',
 '<div class="local-row"><button class="local-btn main" data-local="add-price">保存这条报价并更新参考区间</button><button class="local-btn" data-local="pick-market">从已有珠子选择品类</button></div>',
@@ -185,7 +185,7 @@ function quickPreview(){
  '<label>库存记账单位</label><select id="quick-unit" class="local-field"><option value="beads" '+(p.count?'selected':'')+'>按颗（估算颗数）</option><option value="strands" '+(!p.count?'selected':'')+'>按串（一串记为1个库存单位）</option></select>'+
  '<label>实际录入数量（可核对修改）</label><input id="quick-qty" class="local-field" type="number" min="1" step="1" value="'+(p.count||p.strandCount)+'">'+
  '<label>本批实付总价（元）</label><input id="quick-total" class="local-field" type="number" min="0" step="any" value="'+p.total+'">'+
- '<label>采购平台</label><input id="quick-source" class="local-field" list="local-sources" value="'+E(p.source)+'">'+
+ '<label>购买渠道 *</label><select id="quick-source-channel" class="local-field">'+purchaseSourceOptions(splitPurchaseSource(p.source).channel)+'</select><input id="quick-source-detail" class="local-field" placeholder="补充店铺或直播间" value="'+E(splitPurchaseSource(p.source).detail)+'">'+
  '<div id="quick-cost" class="local-result"></div><button class="local-btn main" data-local="quick-save">确认并保存到物料库存</button>';
  const select=$("quick-unit"),qty=$("quick-qty"),price=$("quick-total");
  const update=()=>{const val=select.value==="beads"?(p.count||1):p.strandCount;qty.value=val;refreshQuickCost()};
@@ -205,7 +205,7 @@ async function saveQuick(){
  if(mode!=="beads"&&mode!=="strands")throw Error("请选库存单位");
  const unit=mode==="beads"?"颗":"串";
  const notes=[p.strandCount+"串半成品珠串",p.length?"串长 "+p.length:"",p.size?"珠径 "+p.size:"",p.count?"口述约 "+p.count+"颗":"",p.approx?"颗数估算，未逐颗清点":"",p.raw].filter(Boolean).join("；");
- const data={id:uid(),kind:"bead",name:p.category+"半成品珠串",beadGroup:inferStoneClass(p.category),subtype:p.category,shape:p.shape||"",spec:[p.size,p.length].filter(Boolean).join(" · "),weight:0,grade:"普通",flaw:"",qty,initialQty:qty,unit,unitCost:round(total/qty,8),totalPurchaseCost:total,qtyApprox:mode==="beads"&&p.approx,approxBeadCount:p.count||null,strandLengthCm:p.length?Number(p.length.replace("cm","")):null,strandCount:p.strandCount,purchaseDate:today(),source:T($("quick-source").value),notes,image:"",createdAt:new Date().toISOString(),isWelfare:false};
+ const data={id:uid(),kind:"bead",name:p.category+"半成品珠串",beadGroup:inferStoneClass(p.category),subtype:p.category,shape:p.shape||"",spec:[p.size,p.length].filter(Boolean).join(" · "),weight:0,grade:"普通",flaw:"",qty,initialQty:qty,unit,unitCost:round(total/qty,8),totalPurchaseCost:total,qtyApprox:mode==="beads"&&p.approx,approxBeadCount:p.count||null,strandLengthCm:p.length?Number(p.length.replace("cm","")):null,strandCount:p.strandCount,purchaseDate:today(),source:makePurchaseSource($("quick-source-channel").value,$("quick-source-detail").value),notes,image:"",createdAt:new Date().toISOString(),isWelfare:false};
  if(!confirm("确定以 "+qty+unit+" 入库「"+data.name+"」？本批实付 ¥"+total.toFixed(2)+"，单位成本约 ¥"+(total/qty).toFixed(4)+"。"+(data.qtyApprox?"\n⚠ 颗数为估算，建议清点后盘点调整。":"")))return;
  await commit(()=>{state.materials.push(data);usageAdd([data])},"已快速入库："+qty+unit+" "+data.name);
  shade.classList.remove("open");
@@ -258,7 +258,7 @@ function renderQuotes(){
  $("local-history").innerHTML=html;
 }
 async function addPrice(){
- const category=T($("local-kind").value),grade=T($("local-grade").value),source=T($("local-source").value),date=T($("local-date").value),note=T($("local-url").value),low=N($("local-low").value),high=N($("local-high").value);
+ const category=T($("local-kind").value),grade=T($("local-grade").value),source=makePurchaseSource($("local-source-channel").value,$("local-source-detail").value),date=T($("local-date").value),note=T($("local-url").value),low=N($("local-low").value),high=N($("local-high").value);
  if(!category||!source||!date)throw Error("请填写品类、来源和报价日期");
  if(!Number.isFinite(low)||!Number.isFinite(high)||low<=0||high<low||high>10000)throw Error("请核对报价范围，必须是人民币元/克且最低价不高于最高价");
  if(date>today())throw Error("报价日期不能是未来日期");
