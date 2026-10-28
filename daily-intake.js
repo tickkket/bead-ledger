@@ -1,6 +1,6 @@
 (function(){"use strict";
 const q=id=>document.getElementById(id),T=x=>String(x??"").trim(),E=x=>T(x).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let draft=null;
+let draft=null;let rememberedUnit="";
 function parse(raw){
  const text=T(raw).replace(/[，,。；;\n]/g," ");if(!text)throw Error("请输入日常进货描述");
  const size=((text.match(/\d+(?:\.\d+)?\s*[-~～至到–—]\s*\d+(?:\.\d+)?\s*(?:mm|毫米|珍珠|贝珠)/i)||[])[0]||"").replace(/珍珠|贝珠$/,"mm")||(text.match(/卡\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*(?:mm|毫米)/i)||[])[0]||"";
@@ -23,19 +23,21 @@ function parse(raw){
  return {text,item,category,kind,qty,unit,size,length,beads:beads?Number(beads[1]):null,half,rawStrand,price:window.LocalAssistantPriceParser?.(text)??null,source:(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||"",approx:/约\d|大概|大约|左右|估计|差不多/.test(text)};
 }
 function preview(){
- draft=parse(q("daily-description").value);const x=draft,box=q("daily-preview");box.style.display="block";
+ draft=parse(q("daily-description").value);draft.conversion=window.BeadConversion.estimate({size:draft.size,length:draft.length,strands:draft.unit==="串"?draft.qty:1,spokenTotal:draft.beads,spokenApprox:draft.approx});const x=draft,box=q("daily-preview");box.style.display="block";
  box.innerHTML='<label>入库类型</label><select id="daily-kind" class="local-field">'+[["bead","散珠 / 素串 / 半成品"],["metal","金属配件"],["supply","耗材包装"],["finished","外购成品（非手作）"]].map(([v,l])=>'<option value="'+v+'" '+(v===x.kind?"selected":"")+'>'+l+'</option>').join("")+'</select>'+
  '<label>物品名称</label><input id="daily-name" class="local-field" value="'+E(x.item)+'">'+
  '<div class="local-row"><div class="local-narrow"><label>规格</label><input id="daily-spec" class="local-field" value="'+E([x.size,x.length].filter(Boolean).join(" · "))+'"></div><div class="local-narrow"><label>数量</label><input id="daily-qty" type="number" class="local-field" min="0.0001" step="any" value="'+x.qty+'"></div></div>'+
  '<div class="local-row"><div class="local-narrow"><label>单位</label><select class="local-field" id="daily-unit">'+["颗","串","个","件","包","卷","米","厘米","克","套"].map(v=>'<option value="'+v+'" '+(v===x.unit?"selected":"")+'>'+v+'</option>').join("")+'</select></div><div class="local-narrow"><label>实际购入总价（元）</label><input id="daily-total" class="local-field" type="number" min="0" step="any" value="'+(x.price??"")+'"></div></div>'+
+ '<div id="daily-bead-convert" class="local-help"></div>'+
  '<div class="local-row"><div class="local-narrow"><label>渠道</label><input id="daily-source" class="local-field" list="local-sources" value="'+E(x.source)+'"></div><div class="local-narrow"><label>日期</label><input id="daily-date" type="date" class="local-field" value="'+today()+'"></div></div>'+
  '<label>备注</label><textarea id="daily-notes" class="local-field">'+E(x.text)+'</textarea>'+
  '<div id="daily-cost" class="local-help"></div><button class="local-btn main" data-daily="save">核对后确认入库</button>';
- for(const el of box.querySelectorAll("#daily-qty,#daily-total,#daily-unit"))el.addEventListener("input",costPreview);
+ for(const el of box.querySelectorAll("#daily-qty,#daily-total"))el.addEventListener("input",costPreview);q("daily-unit").addEventListener("change",changeUnit);rememberedUnit=x.unit;
  costPreview();
  q("local-status").textContent="已整理，请核对。"+(x.beads&&x.unit==="串"?"珠子约"+x.beads+"颗，仅作为备注；库存按串计。":"");
 }
-function costPreview(){const qty=Number(q("daily-qty").value),val=q("daily-total").value,total=Number(val);q("daily-cost").textContent=val!==""&&qty>0&&Number.isFinite(total)?"平均进货成本 ¥"+(total/qty).toFixed(4)+"/"+q("daily-unit").value:"请填写总进价和数量";}
+function changeUnit(){const unit=q("daily-unit").value,cv=draft?.conversion;if(cv&&draft.kind==="bead"&&(unit==="串"||unit==="颗")&&(rememberedUnit==="串"||rememberedUnit==="颗")){const oldQty=Number(q("daily-qty").value);if(rememberedUnit==="串"&&unit==="颗"){const per=cv.beadTotal/cv.strandCount;q("daily-qty").value=Math.round(oldQty*per)}else if(rememberedUnit==="颗"&&unit==="串"){const per=cv.beadTotal/cv.strandCount;q("daily-qty").value=Number((oldQty/per).toFixed(4))}}rememberedUnit=unit;costPreview()}
+function costPreview(){const qty=Number(q("daily-qty").value),val=q("daily-total").value,total=Number(val);const cv=draft?.conversion, unit=q("daily-unit").value;const info=cv&&draft.kind==="bead"&&cv.theoreticalPerStrand?"按珠径 "+cv.diameterMm+"mm 和串长 "+cv.lengthCm+"cm 估计每串约 "+cv.theoreticalPerStrand+"颗。"+(cv.source==="口述颗数"?"你口述约"+cv.beadTotal+"颗，优先使用口述数量。":"未提供颗数时按理论值估算。"):"没有足够规格估算每串颗数。";q("daily-bead-convert").textContent=draft?.kind==="bead"?info:"";q("daily-cost").textContent=val!==""&&qty>0&&Number.isFinite(total)?"平均进货成本 ¥"+(total/qty).toFixed(4)+"/"+unit+(draft?.kind==="bead"?"；整批总价保持不变。":""):"请填写总进价和数量";}
 async function save(){
  if(!draft)throw Error("请先识别进货");
  const kind=q("daily-kind").value,name=T(q("daily-name").value),spec=T(q("daily-spec").value),qty=Number(q("daily-qty").value),unit=q("daily-unit").value,rawPrice=q("daily-total").value,price=Number(rawPrice),source=T(q("daily-source").value),date=q("daily-date").value,notes=T(q("daily-notes").value);
@@ -51,7 +53,7 @@ async function save(){
   const entry={id,type:"out",name,producedQty:qty,stock:qty,buyPrice:cost,price:0,source,notes:notes+"；规格："+spec,image:"",sameOnline:false,createdAt,cost:{unit:cost,material:cost,labor:0,stall:0,tool:0}};
   await commit(()=>state.products.push(entry),"外购成品已入库（非手作）");
  }else{
-  const entry={id,kind,name,subtype:kind==="bead"?(draft.category||name):"",beadGroup:kind==="bead"?inferStoneClass(draft.category||name):"",spec,qty,initialQty:qty,unit,unitCost:cost,totalPurchaseCost:price,source,purchaseDate:date,notes,createdAt,image:"",grade:"普通",flaw:"",weight:0,isWelfare:false,qtyApprox:draft.approx&&unit==="颗",approxBeadCount:draft.beads||null,marketGram:0,suggestedPrice:0};
+  const entry={id,kind,name,subtype:kind==="bead"?(draft.category||name):"",beadGroup:kind==="bead"?inferStoneClass(draft.category||name):"",spec,qty,initialQty:qty,unit,unitCost:cost,totalPurchaseCost:price,source,purchaseDate:date,notes,createdAt,image:"",grade:"普通",flaw:"",weight:0,isWelfare:false,qtyApprox:draft.approx&&unit==="颗",approxBeadCount:draft.conversion?.beadTotal||null,diameterMm:draft.conversion?.diameterMm||null,strandLengthCm:draft.conversion?.lengthCm||null,strandCount:unit==="串"?qty:draft.conversion?.strandCount||null,marketGram:0,suggestedPrice:0};
   await commit(()=>{state.materials.push(entry);if(kind==="bead")usageAdd([entry])},"物料已入库");
  }
  q("daily-description").value="";q("daily-preview").style.display="none";draft=null;
