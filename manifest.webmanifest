@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "饰品摆摊小账本",
-  "short_name": "饰品小账本",
-  "description": "手作饰品散珠、物料、成品、销售与定价，本地离线记账。",
+  "name": "记账本",
+  "short_name": "记账本",
+  "description": "物料、手作成品、进货、定价与销售记录",
   "lang": "zh-CN",
   "start_url": "./",
   "scope": "./",
