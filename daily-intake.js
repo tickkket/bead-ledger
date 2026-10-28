@@ -36,7 +36,7 @@ function preview(){
  '<div class="local-row"><div class="local-narrow"><label>单位</label><select class="local-field" id="daily-unit">'+["颗","串","个","件","包","卷","米","厘米","克","套"].map(v=>'<option value="'+v+'" '+(v===x.unit?"selected":"")+'>'+v+'</option>').join("")+'</select></div><div class="local-narrow"><label>实际购入总价（元）</label><input id="daily-total" class="local-field" type="number" min="0" step="any" value="'+(x.price??"")+'"></div></div>'+
  '<div id="daily-bead-convert" class="local-help"></div>'+
  '<div class="local-row"><div class="local-narrow"><label>购买渠道 *</label><select id="daily-source-channel" class="local-field">'+purchaseSourceOptions(splitPurchaseSource(x.source).channel)+'</select><input id="daily-source-detail" class="local-field" placeholder="店铺、直播间等补充说明" value="'+E(splitPurchaseSource(x.source).detail)+'"></div><div class="local-narrow"><label>日期</label><input id="daily-date" type="date" class="local-field" value="'+today()+'"></div></div>'+
- '<div class="di-full"><label>物料 / 成品图片（可选）</label><div class="di-photo-grid"><div class="di-photo-cell"><label>从相册选择</label><input id="daily-image-file" type="file" accept="image/*" class="di-file"></div><div class="di-photo-cell"><label>用相机拍照</label><input id="daily-image-camera" type="file" accept="image/*" capture="environment" class="di-file"></div></div><div class="di-photo-preview"><img id="daily-image-preview" alt="进货图片预览" style="display:none;width:86px;height:86px;object-fit:cover;border-radius:10px"><div class="di-photo-info"><div id="daily-image-status" class="local-help">请点系统「选择文件」按钮；相册与拍照入口相互独立。</div><button type="button" class="local-btn" data-daily="remove-image">移除图片</button></div></div></div>'+
+ '<div class="di-full"><label>物料 / 成品图片（可选）</label><div class="di-photo-grid"><div class="di-photo-cell"><label>从相册选择</label><input id="daily-image-file" type="file" accept="image/*" class="di-file"></div><div class="di-photo-cell"><label>用相机拍照</label><input id="daily-image-camera" type="file" accept="image/*" capture="environment" class="di-file"></div></div><div class="local-row" style="margin:7px 0"><button type="button" class="local-btn main" data-daily="camera-api">📷 网页相机（备用）</button><button type="button" class="local-btn" data-daily="paste-photo">粘贴已复制图片</button></div><div class="di-photo-preview"><img id="daily-image-preview" alt="进货图片预览" style="display:none;width:86px;height:86px;object-fit:cover;border-radius:10px"><div class="di-photo-info"><div id="daily-image-status" class="local-help">请点系统「选择文件」按钮；相册与拍照入口相互独立。</div><button type="button" class="local-btn" data-daily="remove-image">移除图片</button></div></div></div>'+
  '<label>备注</label><textarea id="daily-notes" class="local-field">'+E(x.text)+'</textarea>'+
  '<div id="daily-cost" class="local-help"></div><button class="local-btn main" data-daily="save">核对后确认入库</button>';
 imageData="";
@@ -104,6 +104,17 @@ async function save(){
 }
 q("local-daily").addEventListener("click",e=>{
  const a=e.target.closest("[data-daily]")?.dataset.daily;if(!a)return;
+ if(a==="camera-api"||a==="paste-photo"){
+  const onImage=data=>{
+   imageData=data;
+   const image=q("daily-image-preview");if(image){image.src=data;image.style.display="block";}
+   q("daily-image-status").textContent="已获得图片，确认入库后保存到本地库存。";
+  };
+  q("daily-image-status").textContent=a==="camera-api"?"正在请求网页摄像头权限…":"正在尝试读取剪贴板图片…";
+  const operation=a==="camera-api"?window.BeadPhotoAccess.camera(onImage):window.BeadPhotoAccess.clipboard(onImage);
+  operation.catch(err=>{q("daily-image-status").textContent=err.message||String(err);});
+  return;
+ }
  if(a==="remove-image"){imageData="";if(q("daily-image-file"))q("daily-image-file").value="";if(q("daily-image-camera"))q("daily-image-camera").value="";if(q("daily-image-preview")){q("daily-image-preview").src="";q("daily-image-preview").style.display="none";}q("daily-image-status").textContent="图片已移除";return;}if(a==="clear"){imageData="";draft=null;q("daily-description").value="";q("daily-preview").style.display="none";return}
  Promise.resolve().then(a==="preview"?preview:save).catch(err=>q("local-status").textContent="无法完成："+err.message);
 });
