@@ -205,7 +205,7 @@ async function saveQuick(){
  if(mode!=="beads"&&mode!=="strands")throw Error("请选库存单位");
  const unit=mode==="beads"?"颗":"串";
  const notes=[p.strandCount+"串半成品珠串",p.length?"串长 "+p.length:"",p.size?"珠径 "+p.size:"",p.count?"口述约 "+p.count+"颗":"",p.approx?"颗数估算，未逐颗清点":"",p.raw].filter(Boolean).join("；");
- const data={id:uid(),kind:"bead",name:p.category+"半成品珠串",beadGroup:"珍珠/贝珠",subtype:p.category,spec:[p.size,p.length].filter(Boolean).join(" · "),weight:0,grade:"普通",flaw:"",qty,initialQty:qty,unit,unitCost:round(total/qty,8),totalPurchaseCost:total,qtyApprox:mode==="beads"&&p.approx,approxBeadCount:p.count||null,strandLengthCm:p.length?Number(p.length.replace("cm","")):null,strandCount:p.strandCount,purchaseDate:today(),source:T($("quick-source").value),notes,image:"",createdAt:new Date().toISOString(),isWelfare:false};
+ const data={id:uid(),kind:"bead",name:p.category+"半成品珠串",beadGroup:inferStoneClass(p.category),subtype:p.category,spec:[p.size,p.length].filter(Boolean).join(" · "),weight:0,grade:"普通",flaw:"",qty,initialQty:qty,unit,unitCost:round(total/qty,8),totalPurchaseCost:total,qtyApprox:mode==="beads"&&p.approx,approxBeadCount:p.count||null,strandLengthCm:p.length?Number(p.length.replace("cm","")):null,strandCount:p.strandCount,purchaseDate:today(),source:T($("quick-source").value),notes,image:"",createdAt:new Date().toISOString(),isWelfare:false};
  if(!confirm("确定以 "+qty+unit+" 入库「"+data.name+"」？本批实付 ¥"+total.toFixed(2)+"，单位成本约 ¥"+(total/qty).toFixed(4)+"。"+(data.qtyApprox?"\n⚠ 颗数为估算，建议清点后盘点调整。":"")))return;
  await commit(()=>{state.materials.push(data);usageAdd([data])},"已快速入库："+qty+unit+" "+data.name);
  shade.classList.remove("open");
