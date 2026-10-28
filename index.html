@@ -20,7 +20,7 @@
 <script>
 'use strict';
 // 本地账本核心无网络请求；PWA shell 另行缓存。金额内部用数值，展示时保留两位小数；原始用量保持最多四位小数。
-const APP_VERSION=3, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
+const APP_VERSION=4, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
 const uid=()=>('i'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 const round=(v,d=4)=>Math.round((Number(v)+Number.EPSILON)*10**d)/10**d;
@@ -31,7 +31,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&
 const attr=esc;
 const safeImage=x=>typeof x==='string'&&/^data:image\/(jpeg|png|webp|gif|svg\+xml)[;,]/i.test(x)?x:'';
 const kindName={bead:'散珠',metal:'金属配件',supply:'耗材',tool:'工具'};
-const stateInit=()=>({version:APP_VERSION,materials:[],batches:[],products:[],markets:[],sales:[],adjustments:[],categoryUsage:{},settings:{laborRate:25,targetMargin:45,stallMode:'none',stallAmount:0,stallPlan:20,toolMode:'auto',toolPool:0,toolPlan:100}});
+const stateInit=()=>({version:APP_VERSION,materials:[],batches:[],products:[],markets:[],sales:[],adjustments:[],marketHistory:[],categoryUsage:{},settings:{laborRate:25,targetMargin:45,stallMode:'none',stallAmount:0,stallPlan:20,toolMode:'auto',toolPool:0,toolPlan:100}});
 let state=stateInit(), db=null, storageMode='indexeddb';
 const ui={tab:'home',materialFilter:'all',productFilter:'hand',search:'',salesFilter:'all',modal:null,images:{},blindRows:[],batchRows:[],bomRows:[]};
 const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
@@ -41,7 +41,7 @@ async function openStore(){
  storageMode='indexeddb';const saved=await new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readonly');const r=t.objectStore(STORE).get(KEY);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});if(saved)state=normalize(saved);
  }catch(e){console.warn('IndexedDB unavailable',e);db=null;try{const x=localStorage.getItem(DB_NAME);if(x)state=normalize(JSON.parse(x));localStorage.setItem(DB_NAME+'-probe','1');localStorage.removeItem(DB_NAME+'-probe');storageMode='localStorage'}catch(_){storageMode='unavailable'}}
 }
-function normalize(x){const base=stateInit();if(!x||typeof x!=='object')return base;for(const k of ['materials','batches','products','markets','sales','adjustments'])if(Array.isArray(x[k]))base[k]=x[k];base.settings={...base.settings,...(x.settings||{})};base.categoryUsage=x.categoryUsage&&typeof x.categoryUsage==='object'?x.categoryUsage:{};return base}
+function normalize(x){const base=stateInit();if(!x||typeof x!=='object')return base;for(const k of ['materials','batches','products','markets','sales','adjustments','marketHistory'])if(Array.isArray(x[k]))base[k]=x[k];base.settings={...base.settings,...(x.settings||{})};base.categoryUsage=x.categoryUsage&&typeof x.categoryUsage==='object'?x.categoryUsage:{};return base}
 async function persist(){if(storageMode==='indexeddb')return new Promise((resolve,reject)=>{try{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(state,KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('数据库保存失败'));tx.onabort=()=>reject(tx.error||new Error('数据库写入中断'))}catch(e){reject(e)}});if(storageMode==='localStorage'){localStorage.setItem(DB_NAME,JSON.stringify(state));return}throw Error('此浏览器无法持久化保存，请换用 Chrome/Edge 浏览器打开')}
 async function commit(action,message='已保存'){const old=structuredClone(state);try{action();await persist();closeModal();render();toast(message)}catch(err){state=old;render();toast('操作未保存：'+(err.message||err));console.error(err)}}
 const byId=(arr,id)=>arr.find(o=>o.id===id);
@@ -72,7 +72,7 @@ function gradeFromText(v){
  return '普通';
 }
 function parsePriceRange(text){const nums=String(text||'').replace(/,/g,'').match(/\d+(?:\.\d+)?/g)||[];if(!nums.length)return null;const a=Number(nums[0]),b=nums[1]===undefined?a:Number(nums[1]);if(!Number.isFinite(a)||!Number.isFinite(b)||a<0||b<0)return null;return [Math.min(a,b),Math.max(a,b)]}
-function beadMarketBand(m){const range=parsePriceRange(m.wholesaleRange);if(!range)return null;const factor=GRADE_FACTOR[m.grade||gradeFromText(m.flaw)]??1;return range.map(x=>round(x*factor,4))}
+function beadMarketBand(m){const mk=state.markets.find(x=>x.category.trim().toLowerCase()===String(m.subtype||'').trim().toLowerCase());const oldDate=String(m.purchaseDate||m.createdAt||'').slice(0,10),newDate=String(mk?.updatedAt||'').slice(0,10);if(mk&&newDate&&(!oldDate||newDate>=oldDate)&&Number(mk.gramPrice)>0)return null;const range=parsePriceRange(m.wholesaleRange);if(!range)return null;const factor=GRADE_FACTOR[m.grade||gradeFromText(m.flaw)]??1;return range.map(x=>round(x*factor,4))}
 function marketReference(m){const band=beadMarketBand(m);if(band)return (band[0]+band[1])/2;const mk=state.markets.find(x=>x.category.trim().toLowerCase()===String(m.subtype||'').trim().toLowerCase());const grade=m.grade||gradeFromText(m.flaw);const base=n(m.marketGram)||n(mk?.gramPrice);if(!base)return 0;if(m.marketGram)return base;const specific=mk?.gradePrices?.[grade];return n(specific)||round(base*(GRADE_FACTOR[grade]??1),4)}
 function marketEstimate(m){return round(n(m.weight)*marketReference(m),2)}
 function marketPreview(root){
@@ -316,4 +316,4 @@ document.addEventListener('input',event=>{const el=event.target;if(el.matches('#
 document.addEventListener('submit',event=>event.preventDefault());
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ui.modal){closeModal();render()}});
 (async()=>{await openStore();render();if(storageMode==='unavailable')toast('当前浏览器无法保存数据，请换用 Chrome / Edge，切勿直接记正式账')})();
-</script><script defer src="./pwa.js"></script></body></html>
+</script><script defer src="./ai-assistant.js"></script><script defer src="./pwa.js"></script></body></html>
