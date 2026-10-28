@@ -30,8 +30,9 @@ async function camera(onImage){
    canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
    canvas.getContext("2d").drawImage(video,0,0,canvas.width,canvas.height);
    const data=canvas.toDataURL("image/jpeg",0.75);
-   await onImage(data);stop();
-  }catch(e){status.textContent=e.message||String(e)}
+   stop(); // Release camera before the photo editor opens.
+   await onImage(data);
+  }catch(e){if(status.isConnected)status.textContent=e.message||String(e);else console.warn('Camera photo editing failed',e)}
  });
  try{
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"}}});
