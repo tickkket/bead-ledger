@@ -36,10 +36,29 @@ function preview(){
  '<div class="local-row"><div class="local-narrow"><label>单位</label><select class="local-field" id="daily-unit">'+["颗","串","个","件","包","卷","米","厘米","克","套"].map(v=>'<option value="'+v+'" '+(v===x.unit?"selected":"")+'>'+v+'</option>').join("")+'</select></div><div class="local-narrow"><label>实际购入总价（元）</label><input id="daily-total" class="local-field" type="number" min="0" step="any" value="'+(x.price??"")+'"></div></div>'+
  '<div id="daily-bead-convert" class="local-help"></div>'+
  '<div class="local-row"><div class="local-narrow"><label>购买渠道 *</label><select id="daily-source-channel" class="local-field">'+purchaseSourceOptions(splitPurchaseSource(x.source).channel)+'</select><input id="daily-source-detail" class="local-field" placeholder="店铺、直播间等补充说明" value="'+E(splitPurchaseSource(x.source).detail)+'"></div><div class="local-narrow"><label>日期</label><input id="daily-date" type="date" class="local-field" value="'+today()+'"></div></div>'+
- '<label>物料 / 成品图片（可选）</label><label class="local-btn main" style="display:block;position:relative;cursor:pointer;text-align:center;padding:14px;min-height:48px;overflow:hidden">📷 点击选择相册照片<input id="daily-image-file" type="file" accept="image/*" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:80px"></label><label for="daily-image-file" class="local-help" style="display:block;padding:8px">如上方没反应，请点击这里尝试打开系统文件选择器</label><div class="local-help">也可以直接点击上方的文件选择框。照片在本机压缩，保存时一起入库。</div><div class="local-row"><img id="daily-image-preview" alt="进货图片预览" style="display:none;width:96px;height:96px;object-fit:cover;border-radius:12px;border:1px solid #dde2dc"><button type="button" class="local-btn" data-daily="remove-image">移除图片</button></div><div class="local-help" id="daily-image-status">未选择图片</div>'+
+ '<div class="di-full"><label>物料 / 成品图片（可选）</label><div class="di-photo-grid"><div class="di-photo-cell"><label>从相册选择</label><input id="daily-image-file" type="file" accept="image/*" class="di-file"></div><div class="di-photo-cell"><label>用相机拍照</label><input id="daily-image-camera" type="file" accept="image/*" capture="environment" class="di-file"></div></div><div class="di-photo-preview"><img id="daily-image-preview" alt="进货图片预览" style="display:none;width:86px;height:86px;object-fit:cover;border-radius:10px"><div class="di-photo-info"><div id="daily-image-status" class="local-help">请点系统「选择文件」按钮；相册与拍照入口相互独立。</div><button type="button" class="local-btn" data-daily="remove-image">移除图片</button></div></div></div>'+
  '<label>备注</label><textarea id="daily-notes" class="local-field">'+E(x.text)+'</textarea>'+
  '<div id="daily-cost" class="local-help"></div><button class="local-btn main" data-daily="save">核对后确认入库</button>';
 imageData="";
+ // Compact after rendering: existing pair rows remain two columns; single fields are grouped into two/three columns.
+ const layoutGrid=document.createElement("div");layoutGrid.className="di-grid";
+ const fullItems=new Set(["daily-shape-box","daily-bead-convert"]);
+ const nodes=Array.from(box.children);
+ for(let i=0;i<nodes.length;){
+  const node=nodes[i];
+  if(node.classList.contains("local-row")){node.classList.add("di-full");layoutGrid.append(node);i++;continue;}
+  if(node.id&&fullItems.has(node.id)){node.classList.add("di-full");layoutGrid.append(node);i++;continue;}
+  if(node.classList.contains("di-full")){layoutGrid.append(node);i++;continue;}
+  if(node.tagName==="LABEL"&&nodes[i+1]){
+   const input=nodes[i+1];
+   const wrap=document.createElement("div");wrap.className="di-field";
+   if(input.id==="daily-image-file"||node.textContent.includes("物料 / 成品图片"))wrap.classList.add("di-full");
+   wrap.append(node,input);layoutGrid.append(wrap);i+=2;continue;
+  }
+  if(node.id==="daily-purchase-type-wrap"){node.classList.add("di-field");layoutGrid.append(node);i++;continue;}
+  node.classList.add("di-full");layoutGrid.append(node);i++;
+ }
+ box.append(layoutGrid);
  const picker=q("daily-shape-select"),shapeSearch=q("daily-shape-search"),shapeValue=q("daily-shape");
  function showShapes(){
   const family=shapeFamily(inferStoneClass(draft.category),draft.category,q("daily-name").value);
@@ -53,7 +72,7 @@ imageData="";
  q("daily-name").addEventListener("change",showShapes);
  showShapes();
 
- q("daily-kind").addEventListener("change",()=>{q("daily-purchase-type-wrap").style.display=q("daily-kind").value==="bead"?"":"none";});q("daily-kind").dispatchEvent(new Event("change"));q("daily-image-file").addEventListener("change",async e=>{const file=e.target.files?.[0];if(!file)return;imageBusy=true;q("daily-image-status").textContent="正在压缩图片…";try{imageData=await shrinkImage(file);const preview=q("daily-image-preview");preview.src=imageData;preview.style.display="block";q("daily-image-status").textContent="图片已准备好，确认保存时会与物料一同入库。";}catch(err){imageData="";q("daily-image-status").textContent="图片未成功处理："+err.message;}finally{imageBusy=false;}});
+ q("daily-kind").addEventListener("change",()=>{q("daily-purchase-type-wrap").style.display=q("daily-kind").value==="bead"?"":"none";});q("daily-kind").dispatchEvent(new Event("change"));const onImageChange=async e=>{const file=e.target.files?.[0];if(!file)return;imageBusy=true;q("daily-image-status").textContent="正在压缩图片…";try{imageData=await shrinkImage(file);const preview=q("daily-image-preview");preview.src=imageData;preview.style.display="block";q("daily-image-status").textContent="图片已准备好，确认保存时会与物料一同入库。";}catch(err){imageData="";q("daily-image-status").textContent="图片未成功处理："+err.message;}finally{imageBusy=false;}};q("daily-image-file").addEventListener("change",onImageChange);q("daily-image-camera").addEventListener("change",onImageChange);
  for(const el of box.querySelectorAll("#daily-qty,#daily-total"))el.addEventListener("input",costPreview);q("daily-unit").addEventListener("change",changeUnit);rememberedUnit=x.unit;
  costPreview();
  q("local-status").textContent="已整理，请核对。"+(x.beads&&x.unit==="串"?"珠子约"+x.beads+"颗，仅作为备注；库存按串计。":"");
@@ -85,7 +104,7 @@ async function save(){
 }
 q("local-daily").addEventListener("click",e=>{
  const a=e.target.closest("[data-daily]")?.dataset.daily;if(!a)return;
- if(a==="remove-image"){imageData="";if(q("daily-image-file"))q("daily-image-file").value="";if(q("daily-image-preview")){q("daily-image-preview").src="";q("daily-image-preview").style.display="none";}q("daily-image-status").textContent="图片已移除";return;}if(a==="clear"){imageData="";draft=null;q("daily-description").value="";q("daily-preview").style.display="none";return}
+ if(a==="remove-image"){imageData="";if(q("daily-image-file"))q("daily-image-file").value="";if(q("daily-image-camera"))q("daily-image-camera").value="";if(q("daily-image-preview")){q("daily-image-preview").src="";q("daily-image-preview").style.display="none";}q("daily-image-status").textContent="图片已移除";return;}if(a==="clear"){imageData="";draft=null;q("daily-description").value="";q("daily-preview").style.display="none";return}
  Promise.resolve().then(a==="preview"?preview:save).catch(err=>q("local-status").textContent="无法完成："+err.message);
 });
 window.DailyIntake={parse};
