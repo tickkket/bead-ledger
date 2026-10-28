@@ -13,11 +13,11 @@ shade.innerHTML=[
 '<section id="local-sheet" role="dialog" aria-modal="true" aria-label="免费本地进货整理">',
 '<div class="local-row" style="justify-content:space-between"><strong style="font-size:18px">✦ 本地智能进货助手</strong><button type="button" class="local-btn" data-local="close">关闭</button></div>',
 '<div class="local-help">永久免费，不需要 API Key、不调用 AI 接口，普通记账仍可断网用。通过本地词库和规则理解常见的珠子名称、数量、卡数和品相；不会凭空补全缺少的珠子或报价。</div>',
-'<div class="local-row"><button type="button" class="local-btn main" data-local="tab-text">整理盲盒</button><button type="button" class="local-btn" data-local="tab-market">积累行情</button></div>',
-'<div id="local-text">',
+'<div class="local-row"><button type="button" class="local-btn main" data-local="tab-daily">日常进货</button><button type="button" class="local-btn" data-local="tab-text">盲盒整理</button><button type="button" class="local-btn" data-local="tab-market">行情记录</button></div><div id="local-daily"><div class="local-help">素串、半成品、散珠、配件、耗材和外购成品都可以记。直接用平时说话的方式输入，识别后核对库存单位和进价，再确认保存。买来的成品会标记为外购，绝不算手作。</div><label>说说这次买了什么</label><textarea class="local-field" id="daily-description" placeholder="例如：小红书进了一串珍珠半成品，4-5mm，38cm，约80颗，进价29块"></textarea><div class="local-row"><button type="button" class="local-btn main" data-daily="preview">识别这笔进货</button><button type="button" class="local-btn" data-daily="clear">清空</button></div><div id="daily-preview" style="display:none"></div></div>',
+'<div id="local-text" style="display:none">',
 '<label>描述盲盒 / 粘贴表格</label>',
 '<textarea id="local-desc" class="local-field" placeholder="今天小红书盲盒实付28元，共12颗，挑出8颗优选。黄水晶卡17无棉无裂1颗，黑发晶卡10微棉2颗，剩下4颗是福利珠……"></textarea>',
-'<div class="local-row"><button class="local-btn main" data-local="quick">口语快速入库</button><button class="local-btn" data-local="parse">整理成表格</button><button class="local-btn" data-local="copy">复制表格</button><button class="local-btn" data-local="import">填入盲盒</button></div>',
+'<div class="local-row"><button class="local-btn" data-local="parse">整理成表格</button><button class="local-btn" data-local="copy">复制表格</button><button class="local-btn" data-local="import">填入盲盒</button></div>',
 '<label>或者上传表格截图（免费本机 OCR）</label><input id="local-photo" class="local-field" type="file" accept="image/*">',
 '<div class="local-row"><button class="local-btn" data-local="ocr">识别图片文字</button><span class="local-help">首次需联网下载开源 OCR 文件；以后能否离线识别取决于缓存。国内网络可能无法访问组件 CDN；复杂表格要人工校对。</span></div>',
 '<label>识别 / 整理结果（可编辑，再确认入库）</label>',
@@ -46,8 +46,8 @@ function refreshLists(){
  const all=new Set([...(typeof BEAD_GROUPS!=="undefined"?Object.values(BEAD_GROUPS).flat():[]),...state.materials.filter(m=>m.kind==="bead").map(m=>m.subtype),...state.markets.map(m=>m.category),...(state.marketSamples||[]).map(m=>m.category)]);
  $("local-categories").innerHTML=[...all].filter(Boolean).sort((a,b)=>String(a).localeCompare(String(b),"zh")).map(x=>'<option value="'+E(x)+'"></option>').join("");
 }
-button.onclick=()=>{refreshLists();$("local-date").value=today();shade.classList.add("open");renderQuotes();};
-function tab(name){$("local-text").style.display=name==="text"?"":"none";$("local-market").style.display=name==="market"?"":"none";say("");}
+button.onclick=()=>{refreshLists();$("local-date").value=today();shade.classList.add("open");tab("daily");renderQuotes();};
+function tab(name){$("local-daily").style.display=name==="daily"?"":"none";$("local-text").style.display=name==="text"?"":"none";$("local-market").style.display=name==="market"?"":"none";for(const [action,key] of [["tab-daily","daily"],["tab-text","text"],["tab-market","market"]]){const btn=shade.querySelector("[data-local="+action+"]");if(btn){btn.classList.toggle("main",name===key);}}say("");}
 const terms=()=>[...new Set([...Object.values(BEAD_GROUPS).flat(),...state.materials.filter(x=>x.kind==="bead").map(x=>x.subtype),...state.markets.map(x=>x.category),"黑发晶","红胶花","黄水晶","钻切黄水","黄水","白月光","紫方糖","紫萤石","特色蓝底黑点珠","蓝底黑点珠","金丝檀","黑玛瑙","天河石"])].filter(Boolean).sort((a,b)=>b.length-a.length);
 // Parse flexible spoken purchase prices, not bead sizes, lengths, or counts.
 function parseSpokenPrice(input){
@@ -284,5 +284,6 @@ function chooseCategory(){
 }
 async function run(task){if(busy)return;busy=true;shade.querySelectorAll("[data-local]").forEach(x=>x.disabled=true);try{await task()}catch(e){say(e.message||String(e),true)}finally{busy=false;shade.querySelectorAll("[data-local]").forEach(x=>x.disabled=false)}}
 $("local-photo").onchange=e=>{photoFile=e.target.files?.[0]||null;say(photoFile?"已选图片："+photoFile.name:"")};
-shade.addEventListener("click",e=>{const b=e.target.closest("[data-local]");if(!b)return;const action=b.dataset.local;if(action==="close"){if(!busy)shade.classList.remove("open");return}if(action==="tab-text"){tab("text");return}if(action==="tab-market"){tab("market");return}const handlers={quick:quickPreview,"quick-save":saveQuick,parse,copy,import:importToLedger,ocr:ocrImage,"add-price":addPrice,"delete-price":()=>deletePrice(b.dataset.id),"pick-market":chooseCategory,refresh:renderQuotes};if(handlers[action])run(handlers[action]);});
+shade.addEventListener("click",e=>{const b=e.target.closest("[data-local]");if(!b)return;const action=b.dataset.local;if(action==="close"){if(!busy)shade.classList.remove("open");return}if(action==="tab-daily"){tab("daily");return}if(action==="tab-text"){tab("text");return}if(action==="tab-market"){tab("market");return}const handlers={quick:quickPreview,"quick-save":saveQuick,parse,copy,import:importToLedger,ocr:ocrImage,"add-price":addPrice,"delete-price":()=>deletePrice(b.dataset.id),"pick-market":chooseCategory,refresh:renderQuotes};if(handlers[action])run(handlers[action]);});
+window.LocalAssistantPriceParser=parseSpokenPrice;
 })();
