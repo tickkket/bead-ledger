@@ -20,7 +20,7 @@
 <script>
 'use strict';
 // 本地账本核心无网络请求；PWA shell 另行缓存。金额内部用数值，展示时保留两位小数；原始用量保持最多四位小数。
-const APP_VERSION=13, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
+const APP_VERSION=14, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
 const uid=()=>('i'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 const round=(v,d=4)=>Math.round((Number(v)+Number.EPSILON)*10**d)/10**d;
@@ -57,7 +57,7 @@ const byId=(arr,id)=>arr.find(o=>o.id===id);
 
 // 自定义六类珠子进货体系（业务归档，不代表专业宝石鉴定）。未知材料进待确认品类。
 const BEAD_GROUPS={
- '石英水晶类':['白水晶','紫水晶','黄水晶','黄水','钻切黄水','茶晶','烟晶','粉水晶','发晶','金发晶','黑发晶','绿发晶','红发晶','兔毛','红兔毛','白兔毛','绿兔毛','草莓晶','胶花','红胶花','紫胶花','幽灵','绿幽灵','红幽灵','白幽灵','银耀石','银曜石','虎眼石'],
+ '石英水晶类':['白水','紫水','粉水','茶水','绿水','红水','蓝水','黑水','白水晶','紫水晶','黄水晶','黄水','钻切黄水','茶晶','烟晶','粉水晶','发晶','金发晶','黑发晶','绿发晶','红发晶','兔毛','红兔毛','白兔毛','绿兔毛','草莓晶','胶花','红胶花','紫胶花','幽灵','绿幽灵','红幽灵','白幽灵','银耀石','银曜石','虎眼石'],
  '长石彩光类':['拉长石','灰月光','月光石','白月光','日光石','太阳石'],
  '彩色单晶矿石类':['萤石','紫萤石','紫方糖','碧玺','石榴石','托帕石','海蓝宝','摩根石','紫锂辉'],
  '翡翠&软玉类':['翡翠','白水','蓝水','和田玉'],
@@ -77,10 +77,20 @@ const classRegex={
  '其他集合玉石类':/玛瑙|玉髓|绿松石|青金石|阿富汗玉|东陵玉/,
  '有机/香木类':/蜜蜡|琥珀|珍珠|贝珠|香木|檀木|檀香|沉香|花梨|崖柏|桃木|木珠|菩提|百香籽|橄榄核|椰蒂|椰壳|米珠/
 };
+const CRYSTAL_NICKNAMES={白水:'白水晶',紫水:'紫水晶',黄水:'黄水晶',粉水:'粉水晶',茶水:'茶晶',绿水:'绿水晶',红水:'红水晶',蓝水:'蓝水晶',黑水:'黑水晶'};
+function crystalNickname(input){
+ const text=String(input||'').trim();
+ // Explicit jade terms take priority over abbreviations, especially 白水 / 蓝水.
+ if(/翡翠|缅甸玉|和田玉/.test(text))return '';
+ for(const [short,full] of Object.entries(CRYSTAL_NICKNAMES)){
+   const re=new RegExp(short+'(?!晶|翡翠|玉)');if(re.test(text))return full;
+ }
+ return '';
+}
 function inferStoneClass(value){
  const x=String(value||'').trim();if(!x||x==='福利珠'||x==='未分类福利珠'||x==='盲盒福利珠')return '待确认品类';
- // A potentially ambiguous shorthand remains unconfirmed rather than being forcibly classified.
- if(/(?:^|[（(])白水(?:[）)]|$)|(?:^|[（(])蓝水(?:[）)]|$)/.test(x)&&!/翡翠/.test(x))return '待确认品类';
+ if(/翡翠|和田玉/.test(x))return '翡翠&软玉类';
+ if(Object.hasOwn(CRYSTAL_NICKNAMES,x)||crystalNickname(x))return '石英水晶类';
  for(const [className,words] of Object.entries(BEAD_GROUPS)){
    if(words.some(word=>word===x))return className;
  }
