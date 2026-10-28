@@ -68,7 +68,7 @@
 <script>
 'use strict';
 // 本地账本核心无网络请求；PWA shell 另行缓存。金额内部用数值，展示时保留两位小数；原始用量保持最多四位小数。
-const APP_VERSION=20, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
+const APP_VERSION=21, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
 const uid=()=>('i'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 const round=(v,d=4)=>Math.round((Number(v)+Number.EPSILON)*10**d)/10**d;
@@ -280,6 +280,22 @@ function svgThumb(label){return 'data:image/svg+xml;charset=UTF-8,'+encodeURICom
 const imgTag=(url,label='物')=>`<img class="thumb" alt="${esc(label)}" src="${safeImage(url)||svgThumb('◇')}" loading="lazy">`;
 function marketFor(m){return state.markets.find(x=>x.category.trim().toLowerCase()===String(m.subtype||'').trim().toLowerCase())}
 function beadSignal(m){if(m.kind!=='bead'||m.isWelfare)return '';const reference=marketReference(m);if(!n(m.weight)||!reference)return '';const actual=n(m.unitCost)/n(m.weight);return actual>reference?`<span class="badge bad">进货克价高于参考 ${round((actual/reference-1)*100,1)}%</span>`:`<span class="badge good">克价低于参考</span>`}
+function beadValueForStockUnit(m){
+ const unit=String(m.unit||"颗");
+ const manual=Number(m.actualValue);
+ if(m.actualValue!==null&&m.actualValue!==undefined&&m.actualValue!==""&&Number.isFinite(manual)&&manual>=0){
+  const basis=String(m.actualValueUnit||unit);
+  return money(manual)+"/"+basis;
+ }
+ const perBead=marketEstimate(m);
+ if(!(perBead>0))return null;
+ if(unit==="颗")return money(perBead)+"/颗";
+ if(unit==="串"){
+  const beads=Number(m.approxBeadCount),strands=Number(m.strandCount);
+  if(beads>0&&strands>0)return money(perBead*beads/strands)+"/串";
+ }
+ return null;
+}
 const stockSummary=m=>{
  const values=m.kind==='bead'?
  [['类型',BEAD_PURCHASE_LABEL[beadPurchaseTypeOf(m)]||'未标注'],['分类',ensureStoneClass(m.beadGroup,m.subtype||m.name)],['形状',m.shape||'未填'],['规格',m.spec||'未填'],['库存',fmt(m.qty)+' '+(m.unit||'颗')],['成本',money(m.unitCost)+'/'+(m.unit||'颗')],['渠道',m.source||'未填']]:
@@ -287,10 +303,8 @@ const stockSummary=m=>{
  const chips=values.map(([k,v])=>'<span class="'+(['类型','分类','渠道'].includes(k)||String(v).length>18?'stock-long':'')+'"><b>'+esc(k)+'：</b>'+esc(v)+'</span>').join('');
  let prices='';
  if(m.kind==='bead'){
-  const ownPrice=n(m.suggestedPrice)>0?money(m.suggestedPrice):String(m.stallRange||'').trim();
-  const estimate=marketEstimate(m);
-  // Reference gram valuations are per bead: never treat one strand as one bead.
-  const worth=estimate>0?money(estimate)+'/颗':'待评估';
+  const ownPrice=n(m.suggestedPrice)>0?money(m.suggestedPrice)+'/'+(m.unit||'颗'):String(m.stallRange||'').trim();
+  const worth=beadValueForStockUnit(m)||'待评估';
   const priceLabel=n(m.suggestedPrice)>0?'建议售价（自定）':'建议售价';
   prices='<div class="stock-price-grid"><div><small>'+priceLabel+'</small><strong>'+esc(ownPrice||'未设置')+'</strong></div><div><small>实际价值参考（估算）</small><strong>'+worth+'</strong></div></div>';
  }
@@ -341,7 +355,7 @@ function setMaterialFormBalance(){
 }
 function materialForm(id=null,forced='bead'){
  const m=id?byId(state.materials,id):null;const kind=m?.kind||forced;ui.images={main:m?.image||''};const opt=[['bead','珠子 / 天然石 / 珍珠 / 香木'],['metal','金属基础配件'],['supply','耗材 / 包装'],['tool','工具']];let body=`<input type="hidden" name="id" value="${attr(id||'')}"><div class="form-grid">${sel('kind','类别',kind,opt)}${field('name','名称',m?.name||'',{required:true,placeholder:'例：白水晶散珠 / 龙虾扣'})}`;
- if(kind==='bead')body+=`${sel('purchaseType','物料类型（可修改）',m?beadPurchaseTypeOf(m):'loose',[['','请选择具体物料类型'],...BEAD_PURCHASE_TYPES])}${sel('beadGroup','散珠分类',ensureStoneClass(m?.beadGroup,m?.subtype||m?.name),groupOpts)}${beadCategoryField('subtype','珠子品类',m?.subtype||'',ensureStoneClass(m?.beadGroup,m?.subtype||m?.name))}${beadShapeField('shape','形状 / 珠型（可搜索）',m?.shape||'',m?.beadGroup,m?.subtype,m?.name)}${field('spec','卡数：珠子尺寸 / 规格',m?.spec||'',{placeholder:'例：8mm / 10卡'})}${num('weight','单颗克重（g；可不填）',m?.weight||'')}${sel('grade','品相档位',m?.grade||gradeFromText(m?.flaw),GRADES)}${field('flaw','具体瑕疵备注',m?.flaw||'')}${field('wholesaleRange','批发参考克价区间（元/g）',m?.wholesaleRange||'',{placeholder:'例：3.5~5元/g'})}${field('stallRange','摆摊建议售价区间（元/颗）',m?.stallRange||'',{placeholder:'例：7–9元'})}${field('onlineRange','线上零售参考区间（元/颗）',m?.onlineRange||'',{placeholder:'例：12~16元'})}${field('costHint','原表单颗成本参考',m?.costHint||'',{placeholder:'仅核对，不改变实际成本'})}<div class="field wide info" data-market-estimate></div>${num('suggestedPrice','自主定价（元，可留空）',m?.suggestedPrice||'')}`;
+ if(kind==='bead')body+=`${sel('purchaseType','物料类型（可修改）',m?beadPurchaseTypeOf(m):'loose',[['','请选择具体物料类型'],...BEAD_PURCHASE_TYPES])}${sel('beadGroup','散珠分类',ensureStoneClass(m?.beadGroup,m?.subtype||m?.name),groupOpts)}${beadCategoryField('subtype','珠子品类',m?.subtype||'',ensureStoneClass(m?.beadGroup,m?.subtype||m?.name))}${beadShapeField('shape','形状 / 珠型（可搜索）',m?.shape||'',m?.beadGroup,m?.subtype,m?.name)}${field('spec','卡数：珠子尺寸 / 规格',m?.spec||'',{placeholder:'例：8mm / 10卡'})}${num('weight','单颗克重（g；可不填）',m?.weight||'')}${sel('grade','品相档位',m?.grade||gradeFromText(m?.flaw),GRADES)}${field('flaw','具体瑕疵备注',m?.flaw||'')}${field('wholesaleRange','批发参考克价区间（元/g）',m?.wholesaleRange||'',{placeholder:'例：3.5~5元/g'})}${field('stallRange','摆摊建议售价区间（元/颗）',m?.stallRange||'',{placeholder:'例：7–9元'})}${field('onlineRange','线上零售参考区间（元/颗）',m?.onlineRange||'',{placeholder:'例：12~16元'})}${field('costHint','原表单颗成本参考',m?.costHint||'',{placeholder:'仅核对，不改变实际成本'})}<div class="field wide info" data-market-estimate></div>${num('suggestedPrice','自主定价（元，可留空）',m?.suggestedPrice||'')}${num('actualValue','实际价值参考（元/当前库存单位，可留空）',m?.actualValue??'')}`;
  if(kind==='tool')body+=`${num('qty','当前数量',m?.qty??1,{min:0})}${sel('toolUnit','工具计量单位',m?.unit||'把',[['把','把'],['件','件'],['个','个'],['套','套'],['台','台'],['张','张']])}${num('totalPrice','购入总价（元）',m?.totalPrice??0)}${num('amortPieces','预计分摊成品件数（件）',m?.amortPieces??100,{min:1})}<div class="field wide"><div class="info">已经分摊 ${fmt(m?.amortUsed||0)} 件；工具不作为配方直接耗材，以避免重复记成本。</div></div>`;
  else body+=`${num('qty',kind==='bead'?'当前颗数':'当前库存数量',m?.qty??1,{min:0})}${sel('unit','库存单位',m?.unit||(kind==='bead'?'颗':'个'),[['颗','颗'],['串','串'],['个','个'],['件','件'],['米','米'],['厘米','厘米'],['克','克'],['毫升','毫升'],['包','包'],['卷','卷'],['套','套']])}${sel('costMode','进价计算方式',kind==='metal'?'unit':'total',[['total','按购入总价计算'],['unit','按单颗 / 单位进价计算']])}${num('unitPrice','单颗 / 单位进价（元）',m?.unitCost??'',{step:'any',hint:'金属配件可直接填写单个进价'})}${num('totalPrice','这批实际购入总价（元）',m?round(n(m.unitCost)*n(m.initialQty??m.qty),4):'',{step:'any'})}<div class="field wide"><div class="info">根据上面的「进价计算方式」选择其中一项为准；另一项仅作参考，保存时自动核算。编辑当前库存不会改变原批初始数量。${m?.batchId?'此条来自盲盒，成本已锁定。':''}</div></div>`;
  body+=`${sourceField('source',m?.source||'')}${field('purchaseDate','进货日期',m?.purchaseDate||today(),{type:'date'})}${field('notes','自定义备注',m?.notes||'',{type:'textarea',wide:true})}`;
@@ -439,7 +453,8 @@ function blindPaste(){
 
 async function saveMaterial(){const root=$('#editor');const id=v(root,'id'),old=byId(state.materials,id),kind=v(root,'kind'),name=v(root,'name');required(name,'请填写物料名称');required(['bead','metal','supply','tool'].includes(kind),'物料类别错误');const qty=nv(root,'qty');required(qty>=0,'数量不能小于0');if(old&&old.kind!==kind)required(false,'已有物料不支持改变类别，请另建条目');
  const material={...old,id:id||uid(),kind,name,source:purchaseSource(root),purchaseDate:v(root,'purchaseDate')||today(),notes:v(root,'notes'),image:ui.images.main||'',qty,unit:kind==='tool'?v(root,'toolUnit'):v(root,'unit'),createdAt:old?.createdAt||new Date().toISOString()};
- if(kind==='bead'){required(BEAD_PURCHASE_LABEL[v(root,'purchaseType')],'请选择散珠、素串或半成品，不允许留空');required(STONE_CLASS_NAMES.includes(v(root,'beadGroup')),'请选择六大分类或待确认品类');}if(kind==='bead')Object.assign(material,{purchaseType:v(root,'purchaseType'),beadGroup:ensureStoneClass(v(root,'beadGroup'),v(root,'subtype')),subtype:v(root,'subtype'),shape:v(root,'shape'),spec:v(root,'spec'),weight:nv(root,'weight'),grade:v(root,'grade'),flaw:v(root,'flaw'),wholesaleRange:v(root,'wholesaleRange'),stallRange:v(root,'stallRange'),onlineRange:v(root,'onlineRange'),costHint:v(root,'costHint'),marketGram:old?.marketGram||0,suggestedPrice:nv(root,'suggestedPrice')});
+ if(kind==='bead'){required(BEAD_PURCHASE_LABEL[v(root,'purchaseType')],'请选择散珠、素串或半成品，不允许留空');required(STONE_CLASS_NAMES.includes(v(root,'beadGroup')),'请选择六大分类或待确认品类');}if(kind==='bead')Object.assign(material,{purchaseType:v(root,'purchaseType'),beadGroup:ensureStoneClass(v(root,'beadGroup'),v(root,'subtype')),subtype:v(root,'subtype'),shape:v(root,'shape'),spec:v(root,'spec'),weight:nv(root,'weight'),grade:v(root,'grade'),flaw:v(root,'flaw'),wholesaleRange:v(root,'wholesaleRange'),stallRange:v(root,'stallRange'),onlineRange:v(root,'onlineRange'),costHint:v(root,'costHint'),marketGram:old?.marketGram||0,suggestedPrice:nv(root,'suggestedPrice'),actualValue:inputVal(root,'actualValue').trim()===''?null:nv(root,'actualValue'),actualValueUnit:inputVal(root,'actualValue').trim()===''?'':material.unit});
+ if(kind==='bead'&&material.actualValue!==null)required(Number.isFinite(material.actualValue)&&material.actualValue>=0,'实际价值参考必须为非负数');
  if(kind==='tool'){const totalPrice=nv(root,'totalPrice'),amortPieces=nv(root,'amortPieces');required(amortPieces>=1&&Number.isInteger(amortPieces),'工具折旧件数必须为正整数');required(totalPrice>=0,'总价不能为负数');if(old&&n(old.amortUsed)>0)required(n(old.totalPrice)===totalPrice&&n(old.amortPieces)===amortPieces,'该工具已经开始摊销，不能修改总价和期数。请新建工具批次。');Object.assign(material,{totalPrice,amortPieces,amortUsed:n(old?.amortUsed),unitCost:0,initialQty:old?.initialQty??qty});}
  else{const total=nv(root,'totalPrice'),initialQty=old?.initialQty??qty;required(initialQty>0,'首次进货数量必须大于0');if(old?.batchId){material.unitCost=old.unitCost;}else if(v(root,'costMode')==='unit'){const per=nv(root,'unitPrice');required(inputVal(root,'unitPrice')!==''&&per>=0,'按单价核算时请输入单颗／单位进价');material.unitCost=round(per,8)}else{required(inputVal(root,'totalPrice')!==''&&total>=0,'按总价核算时请输入购入总价');material.unitCost=round(total/initialQty,8)}material.initialQty=initialQty;}
  await commit(()=>{if(old){const i=state.materials.findIndex(x=>x.id===id);state.materials[i]=material}else state.materials.push(material);if(kind==='bead')usageAdd([material])},'物料已保存')}
