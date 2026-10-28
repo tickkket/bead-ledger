@@ -291,7 +291,7 @@ const stockSummary=m=>{
   const estimate=marketEstimate(m);
   // Reference gram valuations are per bead: never treat one strand as one bead.
   const worth=estimate>0?money(estimate)+'/颗':'待评估';
-  const priceLabel=n(m.suggestedPrice)>0?'自主定价':m.stallRange?'摆摊建议价':'建议售价';
+  const priceLabel=n(m.suggestedPrice)>0?'建议售价（自定）':'建议售价';
   prices='<div class="stock-price-grid"><div><small>'+priceLabel+'</small><strong>'+esc(ownPrice||'未设置')+'</strong></div><div><small>实际价值参考（估算）</small><strong>'+worth+'</strong></div></div>';
  }
  const extra=[m.notes,m.flaw&&'品相 '+m.flaw,m.wholesaleRange&&'批发克价 '+m.wholesaleRange,m.onlineRange&&'线上零售 '+m.onlineRange].filter(Boolean).join(' · ');
