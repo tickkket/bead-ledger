@@ -17,7 +17,7 @@ shade.innerHTML=[
 '<div id="local-text">',
 '<label>描述盲盒 / 粘贴表格</label>',
 '<textarea id="local-desc" class="local-field" placeholder="今天小红书盲盒实付28元，共12颗，挑出8颗优选。黄水晶卡17无棉无裂1颗，黑发晶卡10微棉2颗，剩下4颗是福利珠……"></textarea>',
-'<div class="local-row"><button class="local-btn main" data-local="parse">整理成表格</button><button class="local-btn" data-local="copy">复制表格</button><button class="local-btn" data-local="import">填入盲盒</button></div>',
+'<div class="local-row"><button class="local-btn main" data-local="quick">口语快速入库</button><button class="local-btn" data-local="parse">整理成表格</button><button class="local-btn" data-local="copy">复制表格</button><button class="local-btn" data-local="import">填入盲盒</button></div>',
 '<label>或者上传表格截图（免费本机 OCR）</label><input id="local-photo" class="local-field" type="file" accept="image/*">',
 '<div class="local-row"><button class="local-btn" data-local="ocr">识别图片文字</button><span class="local-help">首次需联网下载开源 OCR 文件；以后能否离线识别取决于缓存。国内网络可能无法访问组件 CDN；复杂表格要人工校对。</span></div>',
 '<label>识别 / 整理结果（可编辑，再确认入库）</label>',
@@ -136,6 +136,60 @@ function importToLedger(){
  shade.classList.remove("open");
  say("已填入盲盒表单。确认整盒总价、总数与优选/福利后再入库。");
 }
+
+function parseQuick(raw){
+ const text=T(raw).replace(/[，。；;\n]/g," ");
+ const price=text.match(/(?:[¥￥]\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*元?\s*(?:买入|购入|入手|买的|买了|到手|实付|包邮|一串)|(?:实付|花了|买入|购入|入手|价格|付款)\s*[¥￥]?\s*(\d+(?:\.\d+)?))/);
+ let total=price?Number(price[1]||price[2]||price[3]):null;
+ if(total===null){const fallback=text.match(/(\d+(?:\.\d+)?)\s*(?:元|块)\s*(?:买|入)/);if(fallback)total=Number(fallback[1]);}
+ const dimension=text.match(/(?:卡\s*)?(\d+(?:\.\d+)?)\s*(?:[-~～到至—–])\s*(\d+(?:\.\d+)?)\s*(?:mm|毫米|厘|珍珠)/i);
+ const size=dimension?dimension[1]+"–"+dimension[2]+"mm":(text.match(/卡\s*\d+(?:\.\d+)?/i)||text.match(/\d+(?:\.\d+)?\s*(?:mm|毫米)/i)||[])[0]||"";
+ const length=text.match(/(\d+(?:\.\d+)?)\s*(?:cm|厘米|公分)(?:\s*(?:长|长度))?/i);
+ const pieces=text.match(/(?:大概|约|差不多|估计|大约|近|左右)?\s*(\d+)\s*颗/);
+ const count=pieces?Number(pieces[1]):null;
+ const approx=!!pieces&&(/大概|大约|约|差不多|估计|左右|近/.test(text.slice(Math.max(0,pieces.index-7),pieces.index+pieces[0].length+3)));
+ const strand=(text.match(/(\d+)\s*串/)||[])[1];const strandCount=strand?Number(strand):(/一串|1串/.test(text)?1:null);
+ const category=(text.match(/(?:淡水珍珠|海水珍珠|贝珠|仿珍珠|珍珠|米珠)/)||[])[0];
+ if(!category)throw Error("口语快速入库目前支持含“珍珠、贝珠”等品类的半成品珠串。其他物料可用“新增物料”或批量表格。");
+ if(!text.includes("半成品")&&!strandCount)throw Error("请写明是半成品珠串或者“一串”，避免误把成品饰品记为散珠。");
+ if(total===null||!Number.isFinite(total)||total<0)throw Error("没有明确识别到实际购入价。请写成“29买入”或“实付29元”。");
+ if(count!==null&&(!Number.isInteger(count)||count<1||count>10000))throw Error("颗数不在合理范围，请核对");
+ const descriptor=length?length[1]+"cm":null;
+ return {category,total,count,approx,size,length:descriptor,strandCount:strandCount||1,raw:T(raw),source:(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||""};
+}
+function quickPreview(){
+ const p=parseQuick($("local-desc").value);meta.quick=p;
+ let box=$("quick-box");if(!box){box=document.createElement("section");box.id="quick-box";box.className="local-help";box.style.cssText="padding:12px;border:1px solid #dce5dc;background:#fff;border-radius:11px;margin:10px 0";$("local-desc").after(box);}
+ box.innerHTML='<strong>快速入库确认</strong><div style="margin:10px 0">品类：'+E(p.category)+' · '+E(p.size||"规格未填")+' · '+E(p.length||"串长未填")+'<br>购入：'+p.strandCount+'串，实付 ¥'+p.total.toFixed(2)+'；'+(p.count?'约 '+p.count+' 颗':'未提供颗数')+'</div>'+
+ '<label>库存记账单位</label><select id="quick-unit" class="local-field"><option value="beads" '+(p.count?'selected':'')+'>按颗（估算颗数）</option><option value="strands" '+(!p.count?'selected':'')+'>按串（一串记为1个库存单位）</option></select>'+
+ '<label>实际录入数量（可核对修改）</label><input id="quick-qty" class="local-field" type="number" min="1" step="1" value="'+(p.count||p.strandCount)+'">'+
+ '<label>本批实付总价（元）</label><input id="quick-total" class="local-field" type="number" min="0" step="any" value="'+p.total+'">'+
+ '<label>采购平台</label><input id="quick-source" class="local-field" list="local-sources" value="'+E(p.source)+'">'+
+ '<div id="quick-cost" class="local-result"></div><button class="local-btn main" data-local="quick-save">确认并保存到物料库存</button>';
+ const select=$("quick-unit"),qty=$("quick-qty"),price=$("quick-total");
+ const update=()=>{const val=select.value==="beads"?(p.count||1):p.strandCount;qty.value=val;refreshQuickCost()};
+ select.onchange=update;qty.oninput=refreshQuickCost;price.oninput=refreshQuickCost;refreshQuickCost();
+ say("已识别半成品珠串。请核对数量、单位和实付价，再点击“确认并保存”。");
+}
+function refreshQuickCost(){
+ const q=Number($("quick-qty")?.value),total=Number($("quick-total")?.value),unit=$("quick-unit")?.value==="beads"?"颗":"串";
+ if(!$("quick-cost"))return;
+ $("quick-cost").textContent=q>0&&Number.isFinite(total)&&total>=0?"预计单位成本 ¥"+(total/q).toFixed(4)+"/"+unit+"（数量估算时成本也是估算值）":"请填有效数量和实际总价";
+}
+async function saveQuick(){
+ const p=meta.quick;if(!p)throw Error("请先点击口语快速入库");
+ const qty=Number($("quick-qty")?.value),total=Number($("quick-total")?.value),mode=$("quick-unit")?.value;
+ if(!Number.isInteger(qty)||qty<=0||qty>10000)throw Error("库存数量必须为1至10000的正整数");
+ if(!Number.isFinite(total)||total<0||!Number.isFinite(total))throw Error("请填写正确实付总价");
+ if(mode!=="beads"&&mode!=="strands")throw Error("请选库存单位");
+ const unit=mode==="beads"?"颗":"串";
+ const notes=[p.strandCount+"串半成品珠串",p.length?"串长 "+p.length:"",p.size?"珠径 "+p.size:"",p.count?"口述约 "+p.count+"颗":"",p.approx?"颗数估算，未逐颗清点":"",p.raw].filter(Boolean).join("；");
+ const data={id:uid(),kind:"bead",name:p.category+"半成品珠串",beadGroup:"珍珠/贝珠",subtype:p.category,spec:[p.size,p.length].filter(Boolean).join(" · "),weight:0,grade:"普通",flaw:"",qty,initialQty:qty,unit,unitCost:round(total/qty,8),totalPurchaseCost:total,qtyApprox:mode==="beads"&&p.approx,approxBeadCount:p.count||null,strandLengthCm:p.length?Number(p.length.replace("cm","")):null,strandCount:p.strandCount,purchaseDate:today(),source:T($("quick-source").value),notes,image:"",createdAt:new Date().toISOString(),isWelfare:false};
+ if(!confirm("确定以 "+qty+unit+" 入库「"+data.name+"」？本批实付 ¥"+total.toFixed(2)+"，单位成本约 ¥"+(total/qty).toFixed(4)+"。"+(data.qtyApprox?"\n⚠ 颗数为估算，建议清点后盘点调整。":"")))return;
+ await commit(()=>{state.materials.push(data);usageAdd([data])},"已快速入库："+qty+unit+" "+data.name);
+ shade.classList.remove("open");
+}
+
 async function ocrImage(){
  if(!photoFile)throw Error("请先上传清晰的截图");
  say("正在准备免费 OCR：首次使用需联网加载开源识别程序和中文模型，费用为0元；以后能否离线识别取决于浏览器缓存。图片在手机本机处理，不会上传给识别服务。");
@@ -209,5 +263,5 @@ function chooseCategory(){
 }
 async function run(task){if(busy)return;busy=true;shade.querySelectorAll("[data-local]").forEach(x=>x.disabled=true);try{await task()}catch(e){say(e.message||String(e),true)}finally{busy=false;shade.querySelectorAll("[data-local]").forEach(x=>x.disabled=false)}}
 $("local-photo").onchange=e=>{photoFile=e.target.files?.[0]||null;say(photoFile?"已选图片："+photoFile.name:"")};
-shade.addEventListener("click",e=>{const b=e.target.closest("[data-local]");if(!b)return;const action=b.dataset.local;if(action==="close"){if(!busy)shade.classList.remove("open");return}if(action==="tab-text"){tab("text");return}if(action==="tab-market"){tab("market");return}const handlers={parse,copy,import:importToLedger,ocr:ocrImage,"add-price":addPrice,"delete-price":()=>deletePrice(b.dataset.id),"pick-market":chooseCategory,refresh:renderQuotes};if(handlers[action])run(handlers[action]);});
+shade.addEventListener("click",e=>{const b=e.target.closest("[data-local]");if(!b)return;const action=b.dataset.local;if(action==="close"){if(!busy)shade.classList.remove("open");return}if(action==="tab-text"){tab("text");return}if(action==="tab-market"){tab("market");return}const handlers={quick:quickPreview,"quick-save":saveQuick,parse,copy,import:importToLedger,ocr:ocrImage,"add-price":addPrice,"delete-price":()=>deletePrice(b.dataset.id),"pick-market":chooseCategory,refresh:renderQuotes};if(handlers[action])run(handlers[action]);});
 })();
