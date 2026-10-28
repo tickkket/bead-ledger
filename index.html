@@ -20,7 +20,7 @@
 <script>
 'use strict';
 // 本地账本核心无网络请求；PWA shell 另行缓存。金额内部用数值，展示时保留两位小数；原始用量保持最多四位小数。
-const APP_VERSION=14, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
+const APP_VERSION=15, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
 const uid=()=>('i'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 const round=(v,d=4)=>Math.round((Number(v)+Number.EPSILON)*10**d)/10**d;
@@ -140,17 +140,25 @@ function detectBeadShape(text,group='',subtype='',name=''){
 }
 function beadShapeField(name,label,value='',group='',subtype='',beadName=''){
  const family=shapeFamily(group,subtype,beadName);
- const listId='shapelist-'+name+'-'+Math.random().toString(36).slice(2,8);
- return '<div class="field"><label>'+esc(label)+'</label><input class="input" name="'+attr(name)+'" type="search" list="'+listId+'" data-shape-search="1" value="'+attr(value)+'" placeholder="搜索形状，例如近圆、圆珠、老型珠" autocomplete="off"><datalist id="'+listId+'">'+sortedShapes(family,value).map(x=>'<option value="'+attr(x)+'"></option>').join('')+'</datalist><div class="hint">可搜索及输入新形状；常用和已使用次数多的优先显示。</div></div>';
+ const options=sortedShapes(family,value);
+ return '<div class="field"><label>'+esc(label)+'</label>'+
+ '<input class="input" data-shape-filter type="search" placeholder="搜索珠形，例如近圆、圆珠、老型珠" autocomplete="off" style="margin-bottom:7px">'+
+ '<select class="select" data-shape-select style="width:100%;min-height:42px"><option value="">点这里展开并选择形状</option>'+options.map(x=>'<option value="'+attr(x)+'" '+(x===value?'selected':'')+'>'+esc(x)+'</option>').join('')+'</select>'+
+ '<input class="input" data-shape-value name="'+attr(name)+'" type="text" value="'+attr(value)+'" style="margin-top:7px" placeholder="选择后自动填入，也可以直接输入新形状" autocomplete="off">'+
+ '<div class="hint">点击下拉选择；也可搜索后选择，或手动填写词库外的形状。</div></div>';
 }
 function refreshShapeChoices(context){
  if(!context)return;
- const sh=context.querySelector('[data-shape-search]');if(!sh)return;
+ const selector=context.querySelector('[data-shape-select]'),valueInput=context.querySelector('[data-shape-value]');
+ if(!selector||!valueInput)return;
  const group=context.querySelector('[name="b-group"],[name="beadGroup"]')?.value||'';
  const subtype=context.querySelector('[name="b-subtype"],[name="subtype"]')?.value||'';
  const name=context.querySelector('[name="b-name"],[name="name"]')?.value||'';
- const list=context.querySelector('#'+sh.getAttribute('list'));
- if(list)list.innerHTML=sortedShapes(shapeFamily(group,subtype,name),sh.value).map(x=>'<option value="'+attr(x)+'"></option>').join('');
+ const keyword=context.querySelector('[data-shape-filter]')?.value?.trim()||'';
+ const current=valueInput.value.trim();
+ const options=sortedShapes(shapeFamily(group,subtype,name),current).filter(x=>x.includes(keyword));
+ selector.innerHTML='<option value="">'+(options.length?'点这里展开并选择形状':'没有匹配项，请直接填写形状')+'</option>'+options.map(x=>'<option value="'+attr(x)+'" '+(x===current?'selected':'')+'>'+esc(x)+'</option>').join('');
+ if(options.includes(current))selector.value=current;
 }
 
 function splitPurchaseSource(raw){
@@ -432,11 +440,11 @@ function handleAction(action,btn){const id=btn.dataset.id;
  }}
 function getBomLoose(){return Array.from($$('#bom-rows [data-bom-row]')).map(r=>({id:v(r,'component'),qty:nv(r,'used')}))}
 document.addEventListener('click',event=>{const tab=event.target.closest('[data-tab]');if(tab){ui.tab=tab.dataset.tab;ui.search='';render();window.scrollTo(0,0);return}const btn=event.target.closest('button[data-action]');if(btn&&!btn.disabled){event.preventDefault();try{handleAction(btn.dataset.action,btn)}catch(e){toast(e.message||String(e))}}});
-document.addEventListener('change',async event=>{const el=event.target;if(el.matches('#editor [name="name"],#editor [name="b-name"],#editor [name="subtype"],#editor [name="b-subtype"],#editor [name="beadGroup"],#editor [name="b-group"]'))refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));if(el.matches('#editor [name="subtype"],#editor [name="b-subtype"]')){const context=el.closest('[data-blind-row]')||$('#editor');const group=context.querySelector('[name="b-group"],[name="beadGroup"]');if(group){const guess=inferStoneClass(el.value);if(guess!=='待确认品类' || group.value==='待确认品类')group.value=guess;}}if(el.matches('[data-image]')){const file=el.files?.[0];if(!file)return;try{ui.images[el.dataset.image]=await shrinkImage(file);updatePreview(el.dataset.image);toast('图片已压缩，保存条目时一并入库')}catch(e){toast(e.message||String(e))}return}
+document.addEventListener('change',async event=>{const el=event.target;if(el.matches('#editor [data-shape-select]')){const wrapper=el.closest('.field');const box=wrapper?.querySelector('[data-shape-value]');if(box)box.value=el.value;return;}if(el.matches('#editor [data-shape-value]')){refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));return;}if(el.matches('#editor [name="name"],#editor [name="b-name"],#editor [name="subtype"],#editor [name="b-subtype"],#editor [name="beadGroup"],#editor [name="b-group"]'))refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));if(el.matches('#editor [name="subtype"],#editor [name="b-subtype"]')){const context=el.closest('[data-blind-row]')||$('#editor');const group=context.querySelector('[name="b-group"],[name="beadGroup"]');if(group){const guess=inferStoneClass(el.value);if(guess!=='待确认品类' || group.value==='待确认品类')group.value=guess;}}if(el.matches('[data-image]')){const file=el.files?.[0];if(!file)return;try{ui.images[el.dataset.image]=await shrinkImage(file);updatePreview(el.dataset.image);toast('图片已压缩，保存条目时一并入库')}catch(e){toast(e.message||String(e))}return}
  if(el.id==='blind-import-file'){const file=el.files?.[0];if(!file)return;try{required(file.size<=2*1024*1024,'表格文件不能超过2MB');const t=await file.text();const box=$('#editor [name="blindTable"]');box.value=t;toast('表格文本已载入，点击「识别并填入表单」进行核对')}catch(e){toast(e.message)}return}if(el.matches('#editor [name="beadGroup"],#editor [name="b-group"]')){const root=el.closest('[data-blind-row]')||$('#editor');const cat=root.querySelector('[name="b-subtype"], [name="subtype"]');const datalist=cat?root.querySelector('#'+cat.getAttribute('list')):null;if(datalist){datalist.innerHTML=sortedCategories(el.value,cat?.value).map(x=>`<option value="${attr(x)}"></option>`).join('')}refreshMarketEstimates();return}if(el.id==='material-filter'){ui.materialFilter=el.value;render();return}if(el.id==='stone-filter'){ui.stoneFilter=el.value;render();return}if(el.id==='sales-filter'){ui.salesFilter=el.value;render();return}if(el.matches('#editor [name="kind"]')){const existing=v($('#editor'),'id');if(existing){toast('已建物料不可改变分类');materialForm(existing);return}materialForm(null,el.value);return}if(el.matches('#editor [name="productId"]')){const p=byId(state.products,el.value);const fieldEl=$('#editor [name="price"]');if(p&&fieldEl)fieldEl.value=p.price;return}
  if(el.matches('#editor input,#editor select')){previewCost();refreshMarketEstimates()}
 });
-document.addEventListener('input',event=>{const el=event.target;if(el.matches('#editor [name="name"],#editor [name="b-name"],#editor [name="subtype"],#editor [name="b-subtype"]'))refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));if(el.matches('#editor [name="subtype"],#editor [name="grade"],#editor [name="weight"],#editor [name="b-subtype"],#editor [name="b-grade"],#editor [name="b-weight"]'))refreshMarketEstimates();if(el.id==='search'){const start=el.selectionStart,end=el.selectionEnd;ui.search=el.value;render();const search=$('#search');if(search){search.focus();search.setSelectionRange(start,end)}return}if(el.matches('#editor input,#editor select')){previewCost();refreshMarketEstimates()}});
+document.addEventListener('input',event=>{const el=event.target;if(el.matches('#editor [data-shape-filter]')){refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));return;}if(el.matches('#editor [name="name"],#editor [name="b-name"],#editor [name="subtype"],#editor [name="b-subtype"]'))refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));if(el.matches('#editor [name="subtype"],#editor [name="grade"],#editor [name="weight"],#editor [name="b-subtype"],#editor [name="b-grade"],#editor [name="b-weight"]'))refreshMarketEstimates();if(el.id==='search'){const start=el.selectionStart,end=el.selectionEnd;ui.search=el.value;render();const search=$('#search');if(search){search.focus();search.setSelectionRange(start,end)}return}if(el.matches('#editor input,#editor select')){previewCost();refreshMarketEstimates()}});
 document.addEventListener('submit',event=>event.preventDefault());
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ui.modal){closeModal();render()}});
 (async()=>{await openStore();render();if(storageMode==='unavailable')toast('当前浏览器无法保存数据，请换用 Chrome / Edge，切勿直接记正式账')})();
