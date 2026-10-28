@@ -49,10 +49,33 @@ function refreshLists(){
 button.onclick=()=>{refreshLists();$("local-date").value=today();shade.classList.add("open");renderQuotes();};
 function tab(name){$("local-text").style.display=name==="text"?"":"none";$("local-market").style.display=name==="market"?"":"none";say("");}
 const terms=()=>[...new Set([...Object.values(BEAD_GROUPS).flat(),...state.materials.filter(x=>x.kind==="bead").map(x=>x.subtype),...state.markets.map(x=>x.category),"黑发晶","红胶花","黄水晶","钻切黄水","黄水","白月光","紫方糖","紫萤石","特色蓝底黑点珠","蓝底黑点珠","金丝檀","黑玛瑙","天河石"])].filter(Boolean).sort((a,b)=>b.length-a.length);
+// Parse flexible spoken purchase prices, not bead sizes, lengths, or counts.
+function parseSpokenPrice(input){
+ const text=String(input||"").replace(/[，,。；;\n]/g," ").replace(/￥/g,"¥");
+ const num="(\\d+(?:\\.\\d{1,3})?)",unit="(?:块钱|人民币|RMB|元|块|圆)";
+ const choices=[];
+ const add=(regex,rank)=>{for(const m of text.matchAll(regex)){
+  const price=Number(m[1]);if(!Number.isFinite(price)||price<0||price>10000000)continue;
+  const after=text.slice(m.index+m[0].length,m.index+m[0].length+10);
+  if(/^\s*(?:颗|个|串|cm|毫米|mm|厘|克|g\b|米|件)/i.test(after))continue;
+  choices.push({price,rank,index:m.index});
+ }};
+ const label="(?:进货总价|采购总价|购入总价|买入总价|进货价格|进货价|进价|购入价|采购价|购买价|买入价|拿货价|成本价|到手价|入手价|实付(?:金额|总价)?|实际付款|付款金额|支付金额|一共花(?:了)?|总共花(?:了)?|花费金额|一共付(?:了)?|付了|花了|花费|总价|合计金额|多少钱|价格|价钱)";
+ const join="(?:\\s*(?:是|为|共|大约|约|差不多|只要|才|要|一共|合计|:|：|=|¥|人民币|RMB))*\\s*";
+ add(new RegExp(label+join+"(?:¥\\s*)?"+num+"\\s*(?:"+unit+")?","gi"),100);
+ add(new RegExp("(?:花(?:掉)?|付(?:款)?|买入|购入|入手|拿货|购得|买的|买了)"+join+"(?:¥\\s*)?"+num+"\\s*(?:"+unit+")?","gi"),72);
+ add(new RegExp(num+"\\s*(?:"+unit+")?\\s*(?:买入|购入|入手|到手|买的|买了|拿下|包邮|成交|购买)","gi"),80);
+ add(new RegExp("¥\\s*"+num,"gi"),65);
+ add(new RegExp(num+"\\s*"+unit,"gi"),60);
+ const standalone=text.match(/(?:^|\s)(\d+(?:\.\d+)?)\s*$/);
+ if(standalone)choices.push({price:Number(standalone[1]),rank:25,index:text.length-standalone[1].length});
+ choices.sort((a,b)=>b.rank-a.rank||a.index-b.index);
+ return choices.length?choices[0].price:null;
+}
 function extractNumbers(raw){
  let total=null,premium=null,welfare=null,cost=null;
  const pick=(re)=>{const m=raw.match(re);return m?Number(m[1]):null;};
- cost=pick(/(?:实付(?:总价)?|到手总价|整盒(?:花了|总价)|总共花(?:了)?|花了|付款|盲盒价)\s*[：:￥¥]?\s*(\d+(?:\.\d+)?)\s*元?/);
+ cost=parseSpokenPrice(raw);
  total=pick(/(?:总共|一共|共计|共|总数|合计)\s*(\d+)\s*颗/);
  premium=pick(/(?:挑(?:出|了)?|选(?:出|了)?|优选(?:珠)?(?:共|有)?|留下)\s*(\d+)\s*颗(?:优选珠|优选)?/);
  welfare=pick(/(?:剩下|其余|剩余|另外|福利珠(?:有|共)?)[^\d]{0,8}(\d+)\s*颗(?:福利珠)?/);
@@ -139,9 +162,7 @@ function importToLedger(){
 
 function parseQuick(raw){
  const text=T(raw).replace(/[，。；;\n]/g," ");
- const price=text.match(/(?:[¥￥]\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*元?\s*(?:买入|购入|入手|买的|买了|到手|实付|包邮|一串)|(?:实付|花了|买入|购入|入手|价格|付款)\s*[¥￥]?\s*(\d+(?:\.\d+)?))/);
- let total=price?Number(price[1]||price[2]||price[3]):null;
- if(total===null){const fallback=text.match(/(\d+(?:\.\d+)?)\s*(?:元|块)\s*(?:买|入)/);if(fallback)total=Number(fallback[1]);}
+ const total=parseSpokenPrice(text);
  const dimension=text.match(/(?:卡\s*)?(\d+(?:\.\d+)?)\s*(?:[-~～到至—–])\s*(\d+(?:\.\d+)?)\s*(?:mm|毫米|厘|珍珠)/i);
  const size=dimension?dimension[1]+"–"+dimension[2]+"mm":(text.match(/卡\s*\d+(?:\.\d+)?/i)||text.match(/\d+(?:\.\d+)?\s*(?:mm|毫米)/i)||[])[0]||"";
  const length=text.match(/(\d+(?:\.\d+)?)\s*(?:cm|厘米|公分)(?:\s*(?:长|长度))?/i);
@@ -152,7 +173,7 @@ function parseQuick(raw){
  const category=(text.match(/(?:淡水珍珠|海水珍珠|贝珠|仿珍珠|珍珠|米珠)/)||[])[0];
  if(!category)throw Error("口语快速入库目前支持含“珍珠、贝珠”等品类的半成品珠串。其他物料可用“新增物料”或批量表格。");
  if(!text.includes("半成品")&&!strandCount)throw Error("请写明是半成品珠串或者“一串”，避免误把成品饰品记为散珠。");
- if(total===null||!Number.isFinite(total)||total<0)throw Error("没有明确识别到实际购入价。请写成“29买入”或“实付29元”。");
+ if(total===null||!Number.isFinite(total)||total<0)throw Error("没有明确识别到实际购入价。可说“进价29块”“花了29元”或“29买的”等。");
  if(count!==null&&(!Number.isInteger(count)||count<1||count>10000))throw Error("颗数不在合理范围，请核对");
  const descriptor=length?length[1]+"cm":null;
  return {category,total,count,approx,size,length:descriptor,strandCount:strandCount||1,raw:T(raw),source:(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||""};
