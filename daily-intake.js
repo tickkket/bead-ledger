@@ -59,6 +59,8 @@ imageData="";
   node.classList.add("di-full");layoutGrid.append(node);i++;
  }
  box.append(layoutGrid);
+ // Give long category and product names a full row; keep short numeric fields paired.
+ for(const id of ['daily-kind','daily-purchase-type','daily-name'])q(id)?.closest('.di-field')?.classList.add('di-full');
  const picker=q("daily-shape-select"),shapeSearch=q("daily-shape-search"),shapeValue=q("daily-shape");
  function showShapes(){
   const family=shapeFamily(inferStoneClass(draft.category),draft.category,q("daily-name").value);
