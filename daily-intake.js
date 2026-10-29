@@ -3,7 +3,7 @@ const q=id=>document.getElementById(id),T=x=>String(x??"").trim(),E=x=>T(x).repl
 // Local constants: do not rely on separately cached index.html exposing these names.
 const BEAD_PURCHASE_TYPES=[["loose","散珠（单颗）"],["strand","素串（整串原料）"],["semi","半成品（未完成饰品）"]];
 const BEAD_PURCHASE_LABEL=Object.fromEntries(BEAD_PURCHASE_TYPES);
-let draft=null;let rememberedUnit="";let imageData="";let imageBusy=false;
+let draft=null;let rememberedUnit="";let imageData="";let imageBusy=false;let batchDraft=[];let batchImages={};
 function extractLabeledAmounts(input){
  const t=String(input||"").replace(/￥/g,"¥").replace(/[，。；;\n]/g," ");
  const number="(\\d+(?:\\.\\d{1,3})?)",currency="(?:元|块钱|块|圆)?";
@@ -49,8 +49,66 @@ function parse(raw){
  else{qty=1;unit=kind==="bead"?"颗":"个"}
  return {text,item,category,shape,purchaseType:half?"semi":rawStrand||lengthImpliesStrand||strand?"strand":"loose",kind,qty,unit,size,length,beads:beads?Number(beads[1]):null,half,rawStrand,price:window.LocalAssistantPriceParser?.(text)??null,source:(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||"",approx:/约\d|大概|大约|左右|估计|差不多/.test(text)};
 }
+function previewBatch(parts){
+ if(parts.length<2||parts.length>20)throw Error("每次批量录入请写2至20条，每件物料用换行或分号分开");
+ batchDraft=parts.map(preparePurchase);batchImages={};draft=null;
+ const container=q("daily-preview");container.style.display="block";
+ const options=(items,selected)=>items.map(([v,name])=>'<option value="'+E(v)+'" '+(v===selected?'selected':'')+'>'+E(name)+'</option>').join("");
+ const row=(x,i)=>{
+  const cv=window.BeadConversion.estimate({size:x.size,length:x.length,strands:x.unit==="串"?x.qty:1,spokenTotal:x.beads,spokenApprox:x.approx});
+  const qty=x.kind==="bead"&&x.unit==="颗"&&!x.beads&&cv.beadTotal?cv.beadTotal:x.qty;
+  return '<section class="di-batch-row" data-purchase-row="'+i+'" style="padding:10px;border:1px solid #dce4dd;border-radius:11px;margin:9px 0;background:#fff">'+
+  '<div class="local-row" style="justify-content:space-between"><b>物料 '+(i+1)+'</b><button type="button" class="local-btn" data-batch="remove" data-row="'+i+'">移除</button></div>'+
+  '<div class="di-batch-grid">'+
+  '<label>物品名称<input class="local-field" data-col="name" value="'+E(x.item)+'"></label>'+
+  '<label>类型<select class="local-field" data-col="kind">'+options([["bead","珠子物料"],["metal","金属配件"],["supply","耗材"],["finished","外购成品"]],x.kind)+'</select></label>'+
+  '<label>具体类型<select class="local-field" data-col="purchaseType">'+options(BEAD_PURCHASE_TYPES,x.purchaseType)+'</select></label>'+
+  '<label>珠子大类<select class="local-field" data-col="group">'+options(STONE_CLASS_NAMES.map(v=>[v,v]),inferStoneClass(x.category||x.item))+'</select></label>'+
+  '<label>形状<input class="local-field" data-col="shape" value="'+E(x.shape||"")+'"></label>'+
+  '<label>规格<input class="local-field" data-col="spec" value="'+E([x.size,x.length].filter(Boolean).join(" · "))+'"></label>'+
+  '<label>数量<input type="number" min="0.0001" step="any" class="local-field" data-col="qty" value="'+qty+'"></label>'+
+  '<label>单位<select class="local-field" data-col="unit">'+options(["颗","串","个","件","包","卷","米","克","套"].map(v=>[v,v]),x.unit)+'</select></label>'+
+  '<label>购入总价（元）<input type="number" min="0" step="any" class="local-field" data-col="price" value="'+(x.price??"")+'"></label>'+
+  '<label>建议售价（元/单位）<input type="number" min="0" step="any" class="local-field" data-col="suggested" value="'+(x.suggested??"")+'"></label>'+
+  '<label>实际价值（元/单位）<input type="number" min="0" step="any" class="local-field" data-col="actual" value="'+(x.actual??"")+'"></label>'+
+  '<label>单颗克重g<input type="number" min="0" step="any" class="local-field" data-col="weight" placeholder="可选"></label>'+
+  '</div><label>照片（可选）<input type="file" accept="image/*" class="local-field" data-batch-photo="'+i+'"></label><img data-batch-preview="'+i+'" alt="照片" style="display:none;width:64px;height:64px;object-fit:cover;border-radius:8px"><div class="local-help">'+E(x.text)+'</div></section>';
+ };
+ container.innerHTML='<div class="local-help">识别到 '+parts.length+' 笔进货。逐条核对价格、类型和数量后一起保存。</div>'+
+ '<div class="di-batch-grid"><label>购买渠道（必选）<select class="local-field" id="batch-source">'+purchaseSourceOptions(batchDraft.find(x=>x.source)?.source||"")+'</select></label><label>店铺备注<input id="batch-source-detail" class="local-field" placeholder="可选"></label><label>进货日期<input id="batch-date" class="local-field" type="date" value="'+today()+'"></label></div>'+
+ '<div id="batch-items">'+batchDraft.map(row).join("")+'</div><button class="local-btn main" type="button" data-batch="save">核对后批量入库</button>';
+ q("local-status").textContent="";
+}
+async function saveBatchIntake(){
+ const source=makePurchaseSource(q("batch-source").value,q("batch-source-detail").value),date=q("batch-date").value;
+ if(!date||date>today())throw Error("请核对进货日期");
+ const rows=[...q("batch-items").querySelectorAll("[data-purchase-row]")];
+ if(!rows.length)throw Error("请至少保留一条进货");
+ const value=(root,key)=>root.querySelector('[data-col="'+key+'"]')?.value?.trim()??"";
+ const entries=rows.map((root,i)=>{
+  const name=value(root,"name"),kind=value(root,"kind"),group=value(root,"group"),purchaseType=value(root,"purchaseType"),unit=value(root,"unit"),qty=Number(value(root,"qty")),raw=value(root,"price"),purchase=Number(raw);
+  if(!name||name.startsWith("待填写"))throw Error("第"+(i+1)+"条请填写准确名称");
+  if(!Number.isFinite(qty)||qty<=0)throw Error("第"+(i+1)+"条数量无效");
+  if(raw===""||!Number.isFinite(purchase)||purchase<0)throw Error("第"+(i+1)+"条需要明确的进价");
+  if(kind==="bead"&&!STONE_CLASS_NAMES.includes(group))throw Error("第"+(i+1)+"条请确认珠子大类");
+  if(kind==="bead"&&!BEAD_PURCHASE_LABEL[purchaseType])throw Error("第"+(i+1)+"条请确认具体物料类型");
+  if(kind==="finished"&&(unit!=="件"||!Number.isInteger(qty)))throw Error("第"+(i+1)+"条外购成品按整数件管理");
+  const optional=key=>{const t=value(root,key);if(t==="")return null;const number=Number(t);if(!Number.isFinite(number)||number<0)throw Error("第"+(i+1)+"条的"+key+"不是有效金额或重量");return number};
+  const suggested=optional("suggested"),actual=optional("actual"),weight=optional("weight");
+  const id=uid(),createdAt=new Date().toISOString(),cost=round(purchase/qty,8),img=batchImages[root.dataset.purchaseRow]||"",spec=value(root,"spec"),shape=value(root,"shape");
+  if(kind==="finished")return {product:true,data:{id,type:"out",name,source,notes:batchDraft[Number(root.dataset.purchaseRow)]?.text||"",producedQty:qty,stock:qty,price:suggested??0,actualValue:actual,buyPrice:cost,image:img,createdAt,sameOnline:false,cost:{unit:cost,material:cost,labor:0,stall:0,tool:0}}};
+  return {product:false,data:{id,kind,name,purchaseType:kind==="bead"?purchaseType:undefined,beadGroup:kind==="bead"?group:"",subtype:kind==="bead"?name:"",shape:kind==="bead"?shape:"",spec,qty,initialQty:qty,unit,unitCost:cost,totalPurchaseCost:purchase,suggestedPrice:suggested??0,actualValue:actual,actualValueUnit:actual===null?"":unit,weight:kind==="bead"?(weight??0):0,source,purchaseDate:date,notes:batchDraft[Number(root.dataset.purchaseRow)]?.text||"",image:img,createdAt,grade:"普通",flaw:"",marketGram:0,isWelfare:false}};
+ });
+ if(!confirm("确认把 "+entries.length+" 笔进货保存到库存？\\n总进价 ¥"+entries.reduce((n,r)=>n+(r.product?r.data.buyPrice*r.data.stock:r.data.totalPurchaseCost),0).toFixed(2)))return;
+ await commit(()=>{for(const entry of entries){if(entry.product)state.products.push(entry.data);else{state.materials.push(entry.data);if(entry.data.kind==="bead")usageAdd([entry.data])}}},"已批量保存 "+entries.length+" 笔进货");
+ // commit rolls back on error internally; only clear the preview when all new IDs are present.
+ if(entries.every(e=>(e.product?state.products:state.materials).some(x=>x.id===e.data.id))){
+  batchDraft=[];batchImages={};q("daily-description").value="";q("daily-preview").style.display="none";
+  q("local-status").textContent="已入库 "+entries.length+" 条";
+ }
+}
 function preview(){
- draft=preparePurchase(q("daily-description").value);draft.conversion=window.BeadConversion.estimate({size:draft.size,length:draft.length,strands:draft.unit==="串"?draft.qty:1,spokenTotal:draft.beads,spokenApprox:draft.approx});if(draft.kind==="bead"&&draft.unit==="颗"&&!draft.beads&&draft.conversion.beadTotal)draft.qty=draft.conversion.beadTotal;const x=draft,box=q("daily-preview");box.style.display="block";
+ const parts=splitPurchases(q("daily-description").value);if(parts.length>1){previewBatch(parts);return;}draft=preparePurchase(parts[0]);draft.conversion=window.BeadConversion.estimate({size:draft.size,length:draft.length,strands:draft.unit==="串"?draft.qty:1,spokenTotal:draft.beads,spokenApprox:draft.approx});if(draft.kind==="bead"&&draft.unit==="颗"&&!draft.beads&&draft.conversion.beadTotal)draft.qty=draft.conversion.beadTotal;const x=draft,box=q("daily-preview");box.style.display="block";
  box.innerHTML='<label>入库类型</label><select id="daily-kind" class="local-field">'+[["bead","散珠 / 素串 / 半成品"],["metal","金属配件"],["supply","耗材包装"],["finished","外购成品（非手作）"]].map(([v,l])=>'<option value="'+v+'" '+(v===x.kind?"selected":"")+'>'+l+'</option>').join("")+'</select>'+
  '<div id="daily-purchase-type-wrap"><label>具体物料类型（可修改）</label><select class="local-field" id="daily-purchase-type">'+BEAD_PURCHASE_TYPES.map(([value,label])=>'<option value="'+value+'" '+(value===x.purchaseType?'selected':'')+'>'+label+'</option>').join('')+'</select></div>'+
  '<label>物品名称</label><input id="daily-name" class="local-field" value="'+E(x.item)+'">'+
@@ -164,6 +222,17 @@ async function save(){
  q("daily-description").value="";q("daily-preview").style.display="none";draft=null;imageData="";
  q("local-status").textContent="已保存；可在物料或外购成品列表中编辑照片与细节。";
 }
+q("local-daily").addEventListener("change",async e=>{
+ const el=e.target.closest("[data-batch-photo]");if(!el)return;
+ const file=el.files?.[0];if(!file)return;
+ const index=el.dataset.batchPhoto;try{const image=await shrinkImage(file);const edited=await window.BeadPhotoEditor.open(image);if(edited){batchImages[index]=edited;const preview=q("daily-preview").querySelector('[data-batch-preview="'+index+'"]');if(preview){preview.src=edited;preview.style.display="block";}}}catch(err){q("local-status").textContent="图片处理失败："+err.message}finally{el.value=""}
+});
+q("local-daily").addEventListener("click",e=>{
+ const b=e.target.closest("[data-batch]");if(!b)return;
+ const action=b.dataset.batch;
+ if(action==="save"){saveBatchIntake().catch(err=>q("local-status").textContent=err.message);return}
+ if(action==="remove"){b.closest("[data-purchase-row]")?.remove();return}
+});
 q("local-daily").addEventListener("click",e=>{
  const a=e.target.closest("[data-daily]")?.dataset.daily;if(!a)return;
  if(a==="camera-api"||a==="paste-photo"){
