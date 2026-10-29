@@ -189,7 +189,7 @@ function importToLedger(){
  blindForm(false);const el=$("editor");
  el.querySelector('[name="blindTable"]').value=$("local-tsv").value;
  if(meta.mode==="description"&&meta.summary.cost!==null&&meta.summary.cost!==undefined)el.querySelector('[name="total"]').value=meta.summary.cost;
- if(meta.summary.total!==null&&meta.summary.total!==undefined)el.querySelector('[name="totalQty"]').value=meta.summary.total;
+ if(meta.summary?.total!==null&&meta.summary?.total!==undefined)el.querySelector('[name="totalQty"]').value=meta.summary.total;
  else el.querySelector('[name="totalQty"]').value=p.count;
  blindPaste();
  shade.classList.remove("open");
