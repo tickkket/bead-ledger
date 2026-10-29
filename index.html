@@ -492,7 +492,7 @@ function saleForm(id=null,pre=null){const s=byId(state.sales,id);const products=
 function adjustStockForm(id){const m=byId(state.materials,id);const body=`<input type="hidden" name="id" value="${id}"><div class="info">${esc(m.name)}｜当前 ${fmt(m.qty)} ${esc(m.unit)}。用于丢失、损坏或实物盘点差异，不用于补货新成本批次。</div><div class="form-grid" style="margin-top:12px">${num('newQty','盘点后的实际库存',m.qty,{min:0})}${field('reason','调整原因','',{required:true,placeholder:'例：制作损耗 1 颗'})}</div>`;openModal('盘点 / 调整库存',body,'save-adjust')}
 // Empty starter/extra rows are UI placeholders, not purchased beads.
 function hasBlindBeadContent(row){
- return !!(String(row.name||'').trim()||String(row.subtype||'').trim()||
+ return !!(String(row.name||'').trim()||String(row.subtype||'').trim()||String(row.shape||'').trim()||
   String(row.spec||'').trim()||String(row.flaw||'').trim()||
   String(row.manualCost||'').trim()||String(row.stallRange||'').trim()||
   String(row.looseMarketPrice||'').trim()||String(row.costHint||'').trim()||
