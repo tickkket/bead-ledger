@@ -25,7 +25,22 @@
  if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost")){
   addEventListener("load",async()=>{
    try{
-    navigator.serviceWorker.addEventListener("controllerchange",()=>{if(!reloading){reloading=true;location.reload();}});
+    navigator.serviceWorker.addEventListener("controllerchange",()=>{
+     if(reloading)return;
+     // Never discard an active blind-box form or other unsaved editor during PWA updates.
+     const editing=!!document.querySelector("#editor,#bead-edit-shade,#bead-photo-overlay,#local-shade.open");
+     if(editing){
+      const current=document.getElementById("ledger-update-banner");
+      if(current)current.remove();
+      const notice=document.createElement("div");
+      notice.id="ledger-update-banner";
+      notice.style.cssText="position:fixed;z-index:99;left:12px;right:12px;bottom:90px;max-width:420px;margin:auto;padding:10px;background:#315e51;color:white;border-radius:10px;font:12px system-ui";
+      notice.textContent="新版本已准备好。请先保存当前录入，再重新打开记账本。";
+      document.body.append(notice);
+      return;
+     }
+     reloading=true;location.reload();
+    });
     const reg=await navigator.serviceWorker.register("./sw.js",{scope:"./"});
     notify(reg);
     reg.addEventListener("updatefound",()=>reg.installing?.addEventListener("statechange",()=>{if(reg.installing?.state==="installed")notify(reg);}));
