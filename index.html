@@ -68,7 +68,7 @@
 <script>
 'use strict';
 // 本地账本核心无网络请求；PWA shell 另行缓存。金额内部用数值，展示时保留两位小数；原始用量保持最多四位小数。
-const APP_VERSION=23, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
+const APP_VERSION=24, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
 const uid=()=>('i'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 const round=(v,d=4)=>Math.round((Number(v)+Number.EPSILON)*10**d)/10**d;
@@ -583,4 +583,4 @@ document.addEventListener('input',event=>{const el=event.target;if(el.matches('#
 document.addEventListener('submit',event=>event.preventDefault());
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ui.modal){closeModal();render()}});
 (async()=>{await openStore();render();if(storageMode==='unavailable')toast('当前浏览器无法保存数据，请换用 Chrome / Edge，切勿直接记正式账')})();
-</script><script defer src="./hand-material.js"></script><script defer src="./photo-editor.js"></script><script defer src="./photo-access.js"></script><script defer src="./ai-assistant.js"></script><script defer src="./bead-conversion.js"></script><script defer src="./daily-intake.js"></script><script defer src="./pwa.js"></script></body></html>
+</script><script defer src="./hand-material.js"></script><script defer src="./photo-editor.js"></script><script defer src="./photo-access.js"></script><script defer src="./ai-assistant.js"></script><script defer src="./bead-conversion.js"></script><script defer src="./daily-intake.js"></script><script defer src="./smart-hand.js"></script><script defer src="./pwa.js"></script></body></html>
