@@ -709,5 +709,7 @@ window.addEventListener('pagehide',()=>{if($('#blind-rows'))saveBlindDraftNow(tr
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&$('#blind-rows'))saveBlindDraftNow(true)});
 document.addEventListener('submit',event=>event.preventDefault());
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ui.modal){closeModal();render()}});
-(async()=>{await openStore();render();if(storageMode==='unavailable')toast('当前浏览器无法保存数据，请换用 Chrome / Edge，切勿直接记正式账')})();
+window.addEventListener('scroll',()=>{try{sessionStorage.setItem('bead-ledger-scroll-'+ui.tab,String(Math.round(window.scrollY)))}catch(e){}},{passive:true});
+window.addEventListener('pagehide',()=>{try{localStorage.setItem('bead-ledger-last-tab',ui.tab);sessionStorage.setItem('bead-ledger-scroll-'+ui.tab,String(Math.round(window.scrollY)))}catch(e){}});
+(async()=>{await openStore();render();requestAnimationFrame(()=>{try{const saved=Number(sessionStorage.getItem('bead-ledger-scroll-'+ui.tab)||0);if(Number.isFinite(saved)&&saved>0)window.scrollTo(0,saved)}catch(e){}});if(storageMode==='unavailable')toast('当前浏览器无法保存数据，请换用 Chrome / Edge，切勿直接记正式账')})();
 </script><script defer src="./hand-material.js"></script><script defer src="./photo-editor.js"></script><script defer src="./photo-access.js"></script><script defer src="./ai-assistant.js"></script><script defer src="./bead-conversion.js"></script><script defer src="./daily-intake.js"></script><script defer src="./smart-hand.js"></script><script defer src="./smart-out.js"></script><script defer src="./ledger-search.js"></script><script defer src="./pwa.js"></script></body></html>
