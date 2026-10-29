@@ -24,7 +24,7 @@ style.textContent+="#local-sheet .di-grid>.local-row.di-full{display:contents}#l
 style.textContent+="#local-sheet .di-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 12px}#local-sheet .di-grid label{font-size:12px;line-height:1.45;margin-bottom:5px}#local-sheet .di-grid .local-field{font-size:14px;min-height:44px;padding:9px 10px}#local-sheet .di-grid .di-photo-cell{padding:10px}#local-sheet .di-grid>.local-row.di-full>.local-narrow{min-width:0}#local-sheet .di-grid .di-full{grid-column:1/-1}@media(min-width:760px){#local-sheet .di-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:350px){#local-sheet .di-grid{grid-template-columns:1fr}#local-sheet .di-grid>.di-full{grid-column:1}}";
 style.textContent+="#local-sheet .di-batch-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 11px;align-items:start}#local-sheet .di-batch-grid label{display:block;min-width:0;margin:0;font-size:12px}#local-sheet .di-batch-grid input,#local-sheet .di-batch-grid select{margin-top:5px;min-width:0}#local-sheet .di-batch-row .local-help{overflow-wrap:anywhere}@media(max-width:350px){#local-sheet .di-batch-grid{grid-template-columns:1fr}}";
 document.head.append(style);
-const button=document.createElement("button");button.id="local-assist";button.type="button";button.textContent="✦ 智能录入";document.body.append(button);
+const button=document.createElement("button");button.id="local-assist";button.type="button";button.textContent="✦ 智能录入";button.style.display="none";button.tabIndex=-1;document.body.append(button);
 const shade=document.createElement("div");shade.id="local-shade";
 shade.innerHTML=[
 '<section id="local-sheet" role="dialog" aria-modal="true" aria-label="免费本地进货整理">',
@@ -321,7 +321,7 @@ function chooseCategory(){
 }
 async function run(task){if(busy)return;busy=true;shade.querySelectorAll("[data-local]").forEach(x=>x.disabled=true);try{await task()}catch(e){say(e.message||String(e),true)}finally{busy=false;shade.querySelectorAll("[data-local]").forEach(x=>x.disabled=false)}}
 $("local-photo").onchange=e=>{photoFile=e.target.files?.[0]||null;say(photoFile?"已选图片："+photoFile.name:"")};
-function closeAssistant(){if(busy)return;shade.classList.remove("open");button.focus({preventScroll:true});}
+function closeAssistant(){if(busy)return;shade.classList.remove("open");const launcher=document.querySelector('[data-action="open-smart-intake"]');if(launcher)launcher.focus({preventScroll:true});}
 shade.addEventListener("click",e=>{if(e.target===shade){closeAssistant();return;}const b=e.target.closest("[data-local]");if(!b)return;const action=b.dataset.local;if(action==="close"){closeAssistant();return}if(action==="tab-daily"){tab("daily");return}if(action==="tab-text"){tab("text");return}if(action==="tab-market"){tab("market");return}if(action==="tab-hand"){tab("hand");return}if(action==="tab-out"){tab("out");return}if(action==="recover-blind"){shade.classList.remove("open");ui.tab="materials";blindForm();return}const handlers={quick:quickPreview,"quick-save":saveQuick,parse,copy,import:importToLedger,ocr:ocrImage,"add-price":addPrice,"delete-price":()=>deletePrice(b.dataset.id),"pick-market":chooseCategory,refresh:renderQuotes};if(handlers[action])run(handlers[action]);});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&shade.classList.contains("open")){e.preventDefault();closeAssistant();}});
 window.LocalAssistantPriceParser=parseSpokenPrice;
