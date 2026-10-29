@@ -133,13 +133,16 @@ function analyze(raw){
    const qty=qtyHit?Number(qtyHit[1]):1;
    const flaw=(span.match(/(?:孔边微黑|无棉无裂|无棉|无裂|微棉|微裂|体透|光泽(?:良好|好)|单面光|带闪片|有棉|有裂|瑕疵|崩口|带棉|透亮)(?:[^\d,，。；;]{0,7})?/g)||[]).join("、");
    const status=/福利珠|福利/.test(context)?"福利":"优选";
-   const price=(span.match(/\d+(?:\.\d+)?\s*(?:~|～|至|-|–)\s*\d+(?:\.\d+)?\s*元\s*\/\s*g/i)||[])[0]||"";
+   const amountText="\\d+(?:\\.\\d+)?(?:\\s*[-~～至–]\\s*\\d+(?:\\.\\d+)?)?";
+   const marketHit=span.match(new RegExp("(?:散珠(?:市场)?行情(?:价)?|散珠市场价|单颗行情价)\\s*(?:是|为|[:：])?\\s*("+amountText+")\\s*(?:元|块)?","i"));
+   const stallHit=span.match(new RegExp("(?:摆摊(?:建议)?售价|建议售价|建议卖)\\s*(?:是|为|[:：])?\\s*("+amountText+")\\s*(?:元|块)?","i"));
+   const market=marketHit?.[1]||"",stall=stallHit?.[1]||"";
    if(!Number.isInteger(qty)||qty<1||qty>300){warnings.push(h.term+"数量不合理，请手动核对");continue}
-   rows.push({name:h.term,subtype:h.term,spec:spec.replace(/\s+/g,""),weight:weights,grade:gradeOf(span),flaw:flaw||T(span.replace(h.term,"").replace(spec,"").replace(/\d+颗/g,"")).slice(0,70),qty,status,wholesaleRange:price,stallRange:"",onlineRange:""});
+   rows.push({name:h.term,subtype:h.term,spec:spec.replace(/\s+/g,""),weight:weights,grade:gradeOf(span),flaw:flaw||T(span.replace(h.term,"").replace(spec,"").replace(/\d+颗/g,"")).slice(0,70),qty,status,looseMarketPrice:market,stallRange:stall});
   }
  }
  if(summary.welfare!==null&&!rows.some(x=>x.status==="福利")){
-  rows.push({name:"未分类福利珠",subtype:"未分类福利珠",spec:"",weight:"",grade:"普通",flaw:"尚未细分品类",qty:summary.welfare,status:"福利",wholesaleRange:"",stallRange:"",onlineRange:""});
+  rows.push({name:"未分类福利珠",subtype:"未分类福利珠",spec:"",weight:"",grade:"普通",flaw:"尚未细分品类",qty:summary.welfare,status:"福利",looseMarketPrice:"",stallRange:""});
  }
  const qtyAll=rows.reduce((a,x)=>a+x.qty,0),pQty=rows.filter(x=>x.status==="优选").reduce((a,x)=>a+x.qty,0),wQty=rows.filter(x=>x.status==="福利").reduce((a,x)=>a+x.qty,0);
  if(summary.total!==null&&summary.total!==qtyAll)warnings.push("整盒说的是"+summary.total+"颗，但可识别明细只有"+qtyAll+"颗，请补齐剩余的品类/数量，切勿直接入库");
@@ -149,8 +152,8 @@ function analyze(raw){
  if(input.length>10000)warnings.push("描述较长，请核对是否漏行");
  return {rows,summary,warnings,mode:"description"};
 }
-const columns=["名称","品类","卡数","克数","品相","瑕疵","数量","优选/福利","该品类市面批发克价参考","摆摊建议售价","线上市面零售价参考"];
-function toTable(rows){const safe=x=>String(x??"").replace(/[\t\r\n]+/g," ").trim();return [columns.join("\t"),...rows.map(r=>[r.name,r.subtype,r.spec,r.weight,r.grade,r.flaw,r.qty,r.status,r.wholesaleRange,r.stallRange,r.onlineRange].map(safe).join("\t"))].join("\n")}
+const columns=["名称","品类","卡数","克数","品相","瑕疵","数量","优选/福利","摆摊建议售价","散珠行情价"];
+function toTable(rows){const safe=x=>String(x??"").replace(/[\t\r\n]+/g," ").trim();return [columns.join("\t"),...rows.map(r=>[r.name,r.subtype,r.spec,r.weight,r.grade,r.flaw,r.qty,r.status,r.stallRange,r.looseMarketPrice].map(safe).join("\t"))].join("\n")}
 function statusOf(result){
  const count=result.rows.reduce((a,x)=>a+x.qty,0),p=result.rows.filter(x=>x.status==="优选").reduce((a,x)=>a+x.qty,0),w=count-p;
  return "识别"+result.rows.length+"行，共"+count+"颗（优选"+p+"，福利"+w+"）。"+(result.summary.cost===null?"整盒实付价待填写。":"整盒实付价参考 ¥"+result.summary.cost+"（保存前核对）。")+(result.warnings.length?"\n需要核对：\n• "+result.warnings.join("\n• "):"\n已识别的字段仍需人工核对，特别是克数、规格和瑕疵。");
