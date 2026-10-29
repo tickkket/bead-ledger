@@ -462,12 +462,14 @@ function parseBlindTable(raw){
  return {premium,welfare,count,identifiedHeader:isHeader,missingWeight,withRanges,costHints};
 }
 function blindPaste(){
- const root=$('#editor'),parsed=parseBlindTable(v(root,'blindTable')),existing=collectBlindRows();
+ const root=$('#editor'),raw=v(root,'blindTable'),parsed=parseBlindTable(raw),existing=collectBlindRows();
+ const oldPriceColumns=/(?:批发克价|批发克重|线上零售价)/.test(raw.split(/\r?\n/)[0]||'');
+ const newMarketColumn=/散珠(?:行情|市场)/.test(raw.split(/\r?\n/)[0]||'');
  if(existing.some(x=>x.name||x.subtype)||ui.images.batch){if(!confirm('识别将替换已填的优选珠与福利珠明细，整盒图片会保留。继续吗？'))return}
  replaceBlindRows(parsed.premium);
  root.querySelector('[name="welfareLines"]').value=parsed.welfare.map(r=>[r.name,r.subtype,r.spec,r.qty,r.shape||''].join('\t')).join('\n');
  const totalInput=root.querySelector('[name="totalQty"]');if(!totalInput.value||Number(totalInput.value)<parsed.count)totalInput.value=parsed.count;
- $('#blind-import-result').innerHTML='已识别 <b>'+parsed.count+'</b> 颗：优选 '+parsed.premium.length+' 颗、福利 '+parsed.welfare.reduce((s,x)=>s+x.qty,0)+' 颗；'+parsed.withRanges+' 颗含散珠行情价。请核对后入库。';
+ $('#blind-import-result').innerHTML='已识别 <b>'+parsed.count+'</b> 颗：优选 '+parsed.premium.length+' 颗、福利 '+parsed.welfare.reduce((s,x)=>s+x.qty,0)+' 颗；'+parsed.withRanges+' 颗含散珠行情价。'+(oldPriceColumns&&!newMarketColumn?'原表含旧版批发克价/线上价格列，这些价格不会换算成散珠行情价，请手动核对填写。':'')+'请核对后入库。';
 }
 
 async function saveMaterial(){const root=$('#editor');const id=v(root,'id'),old=byId(state.materials,id),kind=v(root,'kind'),name=v(root,'name');required(name,'请填写物料名称');required(['bead','metal','supply','tool'].includes(kind),'物料类别错误');const qty=nv(root,'qty');required(qty>=0,'数量不能小于0');if(old&&old.kind!==kind)required(false,'已有物料不支持改变类别，请另建条目');
@@ -509,7 +511,7 @@ function backup(){downloadFile(JSON.stringify({app:'饰品摆摊小账本',backu
 function tsvClean(x){const z=String(x??'').replace(/[\t\r\n]+/g,' ').replace(/\s+/g,' ').trim();return /^[=+@]/.test(z)||(/^-/.test(z)&&!Number.isFinite(Number(z)))?"'"+z:z}
 function sheet(headers,rows){return [headers,...rows].map(row=>row.map(tsvClean).join('\t')).join('\r\n')}
 function makeTsv(section='all'){
- const m=()=>sheet(['类别','物料类型','名称','品类','形状/珠型','规格/卡数','克重g','品相瑕疵','当前库存','单位','单位成本元','来源','日期','盲盒批次','福利珠','市场参考元每克','建议售价元','备注'],state.materials.map(x=>[kindName[x.kind],x.kind==='bead'?(BEAD_PURCHASE_LABEL[beadPurchaseTypeOf(x)]||'未标注'):'' ,x.name,x.subtype,x.shape||'',x.spec,x.weight,x.flaw,x.qty,x.unit,x.kind==='tool'?x.totalPrice:x.unitCost,x.source,x.purchaseDate,x.batchId||'',x.isWelfare?'是':'否',x.marketGram,x.suggestedPrice,x.notes]));
+ const m=()=>sheet(['类别','物料类型','名称','品类','形状/珠型','规格/卡数','克重g','品相瑕疵','当前库存','单位','单位成本元','来源','日期','盲盒批次','福利珠','市场参考元每克','自主定价元','摆摊建议售价（元/颗）','散珠行情价（元/颗）','备注'],state.materials.map(x=>[kindName[x.kind],x.kind==='bead'?(BEAD_PURCHASE_LABEL[beadPurchaseTypeOf(x)]||'未标注'):'' ,x.name,x.subtype,x.shape||'',x.spec,x.weight,x.flaw,x.qty,x.unit,x.kind==='tool'?x.totalPrice:x.unitCost,x.source,x.purchaseDate,x.batchId||'',x.isWelfare?'是':'否',x.marketGram,x.suggestedPrice,x.stallRange||'',x.looseMarketPrice||'',x.notes]));
  const prod=()=>sheet(['类别','成品名称','入库总数量','现货数量','进价/完整单位成本元','物料成本','手工费','摊位费','工具折旧','售价元','预计单件收益','毛利率%','拿货渠道','容易找到同款','备注','配方明细'],state.products.map(x=>{const c=x.cost||{},price=n(x.price),cost=n(c.unit??x.buyPrice);return [x.type==='hand'?'自制手作':'外购成品（非手作）',x.name,x.producedQty,x.stock,cost,c.material,c.labor,c.stall,c.tool,price,round(price-cost,2),price?round((price-cost)/price*100,2):0,x.source,x.sameOnline?'是':'否',x.notes,(x.components||[]).map(y=>(byId(state.materials,y.id)?.name||'历史物料')+' x '+y.qty).join('；')] }));
  const sal=()=>sheet(['日期','类别','名称','售出数量','实际成交单价元','售出单位成本元','销售额元','扣成本后收益元','其中手工费元','备注'],state.sales.map(x=>[x.date,x.type==='hand'?'自制手作':'外购成品（非手作）',x.name,x.qty,x.price,x.cost,round(n(x.price)*n(x.qty),2),round((n(x.price)-n(x.cost))*n(x.qty),2),round(n(x.labor)*n(x.qty),2),x.notes]));
  const market=()=>sheet(['品类','市场参考克价元每克','平台克价元每克','更新日期'],state.markets.map(x=>[x.category,x.gramPrice,x.platformPrice,x.updatedAt]));
