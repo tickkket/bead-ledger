@@ -12,12 +12,12 @@ function parse(t){
  const cn={一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9,十:10};
  const qty=rawQty?(Number(rawQty)||cn[rawQty]||1):1;
  const find=re=>{const m=t.match(re);return m?Number(m[1]):null};
- const unitCost=find(/(?:每件|单件|每对|每套)?\s*(?:进价|每件进价|成本|拿货价)\s*(?:为|是|：|:|¥)?\s*(\d+(?:\.\d+)?)/);
+ const unitCost=find(/(?:每件|单件|每对|每套)?\s*(?:进价|每件进价|买价|成本|拿货价)\s*(?:为|是|：|:|¥)?\s*(\d+(?:\.\d+)?)/);
  const totalCost=find(/(?:总进价|进货总价|采购总价|总成本|购入总价)\s*(?:为|是|：|:|¥)?\s*(\d+(?:\.\d+)?)/);
  const cost=totalCost!==null&&!/(?:每件|单件|每对|每套)\s*(?:进价|成本)/.test(t)?Number((totalCost/qty).toFixed(4)):unitCost;
  const price=find(/(?:建议售价|售价|卖价|定价|打算卖|准备卖|想卖|卖)\s*(?:为|是|：|:|¥)?\s*(\d+(?:\.\d+)?)/);
  const channel=channels.find(x=>x&&x!=="其他"&&t.includes(x))||"";
- const name=t.replace(/(?:每件|单件|每对|每套)?\s*(?:总进价|进货总价|采购总价|总成本|购入总价|进价|成本|拿货价|建议售价|售价|卖价|定价|打算卖|准备卖)\s*(?:为|是|：|:|¥)?\s*\d+(?:\.\d+)?\s*(?:元|块)?/g," ").replace(/(?:\d+|[一二两三四五六七八九十])\s*(?:件|个|条|对|副|套|双)/g," ").replace(/小红书|淘宝|拼多多|1688|抖音|微信|线下批发|外购|买了|进了/g," ").replace(/[，,。]/g," ").trim();
+ const name=t.replace(/(?:每件|单件|每对|每套)?\s*(?:总进价|进货总价|采购总价|总成本|购入总价|进价|买价|成本|拿货价|建议售价|售价|卖价|定价|打算卖|准备卖|想卖|卖)\s*(?:为|是|：|:|¥)?\s*\d+(?:\.\d+)?\s*(?:元|块)?/g," ").replace(/(?:\d+|[一二两三四五六七八九十])\s*(?:件|个|条|对|副|套|双)/g," ").replace(/小红书|淘宝|拼多多|1688|抖音|微信|线下批发|外购|买了|进了/g," ").replace(/[，,。]/g," ").trim();
  return {name,qty,cost:cost??"",price:price??"",channel};
 }
 const OUT_DRAFT_KEY="bead-ledger-out-batch-draft-v1";
