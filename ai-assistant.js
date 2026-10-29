@@ -35,7 +35,7 @@ shade.innerHTML=[
 '<div id="local-text" style="display:none">',
 '<label>描述盲盒 / 粘贴表格</label>',
 '<textarea id="local-desc" class="local-field" placeholder="今天小红书盲盒实付28元，共12颗，挑出8颗优选。黄水晶卡17无棉无裂1颗，黑发晶卡10微棉2颗，剩下4颗是福利珠……"></textarea>',
-'<div class="local-row"><button class="local-btn" data-local="parse">整理成表格</button><button class="local-btn" data-local="copy">复制表格</button><button class="local-btn" data-local="import">填入盲盒</button></div>',
+'<div class="local-row"><button class="local-btn" data-local="parse">整理成表格</button><button class="local-btn" data-local="copy">复制表格</button><button class="local-btn" data-local="import">填入盲盒</button><button class="local-btn main" data-local="recover-blind">恢复盲盒草稿</button></div>',
 '<label>或者上传表格截图（免费本机 OCR）</label><input id="local-photo" class="local-field" type="file" accept="image/*">',
 '<div class="local-row"><button class="local-btn" data-local="ocr">识别图片文字</button><span class="local-help">首次识别需联网加载，结果请核对。</span></div>',
 '<label>识别 / 整理结果（可编辑，再确认入库）</label>',
@@ -306,7 +306,7 @@ function chooseCategory(){
 async function run(task){if(busy)return;busy=true;shade.querySelectorAll("[data-local]").forEach(x=>x.disabled=true);try{await task()}catch(e){say(e.message||String(e),true)}finally{busy=false;shade.querySelectorAll("[data-local]").forEach(x=>x.disabled=false)}}
 $("local-photo").onchange=e=>{photoFile=e.target.files?.[0]||null;say(photoFile?"已选图片："+photoFile.name:"")};
 function closeAssistant(){if(busy)return;shade.classList.remove("open");button.focus({preventScroll:true});}
-shade.addEventListener("click",e=>{if(e.target===shade){closeAssistant();return;}const b=e.target.closest("[data-local]");if(!b)return;const action=b.dataset.local;if(action==="close"){closeAssistant();return}if(action==="tab-daily"){tab("daily");return}if(action==="tab-text"){tab("text");return}if(action==="tab-market"){tab("market");return}if(action==="tab-hand"){tab("hand");return}const handlers={quick:quickPreview,"quick-save":saveQuick,parse,copy,import:importToLedger,ocr:ocrImage,"add-price":addPrice,"delete-price":()=>deletePrice(b.dataset.id),"pick-market":chooseCategory,refresh:renderQuotes};if(handlers[action])run(handlers[action]);});
+shade.addEventListener("click",e=>{if(e.target===shade){closeAssistant();return;}const b=e.target.closest("[data-local]");if(!b)return;const action=b.dataset.local;if(action==="close"){closeAssistant();return}if(action==="tab-daily"){tab("daily");return}if(action==="tab-text"){tab("text");return}if(action==="tab-market"){tab("market");return}if(action==="tab-hand"){tab("hand");return}if(action==="recover-blind"){shade.classList.remove("open");ui.tab="materials";blindForm();return}const handlers={quick:quickPreview,"quick-save":saveQuick,parse,copy,import:importToLedger,ocr:ocrImage,"add-price":addPrice,"delete-price":()=>deletePrice(b.dataset.id),"pick-market":chooseCategory,refresh:renderQuotes};if(handlers[action])run(handlers[action]);});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&shade.classList.contains("open")){e.preventDefault();closeAssistant();}});
 window.LocalAssistantPriceParser=parseSpokenPrice;
 })();
