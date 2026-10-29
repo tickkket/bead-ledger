@@ -68,7 +68,7 @@
 <script>
 'use strict';
 // 本地账本核心无网络请求；PWA shell 另行缓存。金额内部用数值，展示时保留两位小数；原始用量保持最多四位小数。
-const APP_VERSION=25, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
+const APP_VERSION=26, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
 const uid=()=>('i'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 const round=(v,d=4)=>Math.round((Number(v)+Number.EPSILON)*10**d)/10**d;
@@ -372,7 +372,7 @@ function materialForm(id=null,forced='bead'){
 function blindRow(r={},i=0){const group=ensureStoneClass(r.beadGroup,r.subtype||r.name);return `<div class="line-entry" data-blind-row="${i}"><div class="flex" style="justify-content:space-between"><div class="line-title">优选珠 ${i+1}</div><button type="button" class="btn small danger" data-action="remove-blind-row" data-index="${i}">移除</button></div><div class="form-grid">${field('b-name','名称',r.name||'',{placeholder:'例：葡萄石圆珠'})}${sel('b-group','散珠分类',group,groupOpts)}${beadCategoryField('b-subtype','珠子品类',r.subtype||'',group)}${beadShapeField('b-shape','形状 / 珠型（可搜索）',r.shape||detectBeadShape(r.name,group,r.subtype,r.name),group,r.subtype,r.name)}${field('b-spec','卡数 / 尺寸规格',r.spec||'',{placeholder:'例：8mm / 10卡'})}${num('b-weight','单颗克重（g）',r.weight??'')}${sel('b-grade','品相档位',r.grade||gradeFromText(r.flaw),GRADES)}${field('b-flaw','瑕疵备注',r.flaw||'')}${num('b-manual','手动分摊成本（元）',r.manualCost??'',{hint:'仅手动成本分摊时填写'})}${field('b-stall-range','摆摊建议售价（元/颗）',r.stallRange||'',{placeholder:'例如 7–9'})}${field('b-loose-market','散珠行情价（元/颗）',r.looseMarketPrice||'',{placeholder:'例如 8–12'})}${field('b-ref-cost','原表成本参考（仅对照）',r.costHint||'',{placeholder:'≈2.49元；不作为入库成本'})}</div>${imageField('blind-'+i,'本颗照片')}</div>`}
 const BLIND_DRAFT_KEY='bead-ledger-blind-form-autosave-v1';
 const BLIND_DRAFT_DB='bead-ledger-blind-photo-drafts-v1';
-let blindDraftTimer=null,blindDraftWrite=Promise.resolve();
+let blindDraftTimer=null,blindDraftWrite=Promise.resolve(),blindDraftTouched=false;
 function hasBlindDraft(){
  try{const raw=localStorage.getItem(BLIND_DRAFT_KEY);return !!(raw&&JSON.parse(raw)?.rows?.length)}catch(e){return false}
 }
@@ -382,13 +382,31 @@ function captureBlindDraft(){
  return {version:1,savedAt:Date.now(),fields:Object.fromEntries(names.map(name=>[name,inputVal(root,name)])),
    rows:collectBlindRows().map(({image,...rest})=>rest),images:{...ui.images}};
 }
-function saveBlindDraftNow(){
- const data=captureBlindDraft();if(!data)return;
- const {images,...textDraft}=data;
- try{localStorage.setItem(BLIND_DRAFT_KEY,JSON.stringify(textDraft))}catch(err){console.warn('Blind draft text backup unavailable',err)}
- clearTimeout(blindDraftTimer);
- blindDraftTimer=setTimeout(()=>{blindDraftWrite=blindDraftWrite.then(()=>writeBlindDraftImages(data)).catch(err=>console.warn('Blind draft photo backup unavailable',err));},700);
+function blindDraftStatus(message,error=false){
+ const box=$('#blind-draft-status');if(box){box.textContent=message;box.style.color=error?'#a33131':'#5a7060'}
 }
+function queueBlindImageDraft(snapshot,immediate=false){
+ clearTimeout(blindDraftTimer);
+ const write=()=>{blindDraftWrite=blindDraftWrite.then(()=>writeBlindDraftImages(snapshot)).then(()=>blindDraftStatus('草稿已暂存')).catch(err=>{console.warn('盲盒照片草稿未写入',err);blindDraftStatus('照片暂存失败，可再次点击保存草稿',true)})};
+ if(immediate)write();else blindDraftTimer=setTimeout(write,350);
+}
+function saveBlindDraftNow(immediate=false){
+ const data=captureBlindDraft();if(!data)return false;
+ const {images,...textOnly}=data;let ok=false;
+ try{localStorage.setItem(BLIND_DRAFT_KEY,JSON.stringify(textOnly));ok=true;blindDraftStatus('文字已自动暂存')}
+ catch(err){console.warn('盲盒文字草稿存储失败',err);blindDraftStatus('文字草稿未保存：请检查存储权限或空间',true)}
+ queueBlindImageDraft(data,immediate||!ok);
+ return ok;
+}
+async function saveBlindDraftManually(){
+ const snapshot=captureBlindDraft();required(snapshot?.rows?.length,'请先打开盲盒录入表单');
+ const written=saveBlindDraftNow(true);
+ await blindDraftWrite;
+ if(!written)throw Error('文字草稿无法存储，请先将信息复制到记事本');
+ blindDraftStatus('已保存草稿 · '+snapshot.rows.length+'颗');
+ toast('草稿已保存：'+snapshot.rows.length+'颗');
+}
+
 async function blindDraftStore(){
  const db=await new Promise((resolve,reject)=>{const request=indexedDB.open(BLIND_DRAFT_DB,1);
   request.onupgradeneeded=()=>request.result.createObjectStore('drafts');
@@ -410,27 +428,29 @@ async function clearBlindDraft(){
  clearTimeout(blindDraftTimer);try{localStorage.removeItem(BLIND_DRAFT_KEY)}catch(e){}
  try{await blindDraftWrite;const database=await blindDraftStore();try{await new Promise((resolve,reject)=>{const tx=database.transaction('drafts','readwrite');tx.objectStore('drafts').delete('latest');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}finally{database.close()}}catch(e){console.warn('Old blind photo draft cleanup unavailable',e)}
 }
-async function restoreBlindDraft(){
+async function restoreBlindDraft(automatic=false){
  const root=$('#editor');if(!root||!$('#blind-rows'))return;
  let textDraft=null;try{textDraft=JSON.parse(localStorage.getItem(BLIND_DRAFT_KEY)||'null')}catch(e){}
  let photoDraft=null;try{await blindDraftWrite;photoDraft=await readBlindDraftImages()}catch(e){}
  const data=(photoDraft?.savedAt>=Number(textDraft?.savedAt||0)&&photoDraft?.rows?.length?photoDraft:textDraft)||photoDraft;
  required(data?.rows?.length,'没有找到可恢复的盲盒草稿');
- if(!confirm('将上次未保存的盲盒草稿恢复到当前表单？当前未保存的填写内容会被替换。'))return;
+ if(automatic&&blindDraftTouched)return;
+ if(!automatic&&!confirm('恢复上次的 '+data.rows.length+' 颗盲盒草稿？当前未保存的内容会被替换。'))return;
  for(const [name,value] of Object.entries(data.fields||{})){
   const node=root.querySelector('[name="'+CSS.escape(name)+'"]');if(node)node.value=String(value??'');
  }
- const images=photoDraft?.images&&photoDraft.savedAt>=data.savedAt-2000?photoDraft.images:{};
+ const images=photoDraft?.images&&photoDraft.rows?.length===data.rows.length?photoDraft.images:{};
  ui.images={batch:images.batch||'',...images};
  replaceBlindRows(data.rows.map((r,i)=>({...r,image:images['blind-'+i]||''})));
  const batchPreview=root.querySelector('[data-preview="batch"]');if(batchPreview)batchPreview.src=safeImage(ui.images.batch)||svgThumb('图');
- toast('已恢复 '+data.rows.length+' 颗优选珠草稿'+(Object.keys(images).length?'（含已暂存照片）':'；照片需重新添加'));
- saveBlindDraftNow();
+ blindDraftStatus('已恢复上次草稿 · '+data.rows.length+'颗');
+ toast('已恢复 '+data.rows.length+' 颗优选珠草稿，保存前请核对图片和价格');
+ saveBlindDraftNow(true);
 }
 
-function blindForm(){ui.blindRows=[{}];ui.images={};const body=`<div class="warning">整盒成本分摊给优选珠；福利珠成本为0。</div>${hasBlindDraft()?'<div class="info" style="margin-bottom:9px"><button type="button" class="btn small" data-action="restore-blind-draft">恢复上次未保存的盲盒草稿</button></div>':''}<div class="form-grid" style="margin-top:12px">${field('title','盲盒批次名称','',{required:true,placeholder:'例：10月28日直播盲盒'})}${num('total','盲盒实付总成本（元）','',{required:true})}${num('totalQty','盲盒总颗数','',{required:true,min:1,step:1})}${sourceField('source','')}${sel('split','成本分摊方式','even',[['even','优选珠平均分摊'],['manual','逐颗手动分摊']])}${field('date','进货日期',today(),{type:'date'})}${field('welfareName','未分类福利珠名称','盲盒福利珠')}${field('notes','整盒备注','',{wide:true,type:'textarea'})}</div>${imageField('batch','整盒盲盒图片 / 采购截图')}<div class="line-entry"><div class="flex" style="justify-content:space-between"><b>一键导入盲盒分类明细</b><button type="button" class="btn small primary" data-action="parse-blind-table">识别并填入表单</button></div><p class="sub" style="margin:6px 0">支持粘贴含表头的 Excel/WPS、CSV/TSV：名称、品类、卡数、品相、分摊成本、摆摊建议售价、散珠行情价等。</p><textarea class="textarea" name="blindTable" style="min-height:135px" placeholder="类别,名称,品类,卡数,克数,品相,数量,类型
+function blindForm(){ui.blindRows=[{}];ui.images={};const body=`<div class="flex" style="flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:10px"><button type="button" class="btn small primary" data-action="save-blind-draft">保存草稿</button><button type="button" class="btn small" data-action="restore-blind-draft">恢复草稿</button><button type="button" class="btn small" data-action="reset-blind-draft">新建空白盲盒</button><span class="muted tiny" id="blind-draft-status" aria-live="polite">草稿检查中</span></div><div class="form-grid" style="margin-top:12px">${field('title','盲盒批次名称','',{required:true,placeholder:'例：10月28日直播盲盒'})}${num('total','盲盒实付总成本（元）','',{required:true})}${num('totalQty','盲盒总颗数','',{required:true,min:1,step:1})}${sourceField('source','')}${sel('split','成本分摊方式','even',[['even','优选珠平均分摊'],['manual','逐颗手动分摊']])}${field('date','进货日期',today(),{type:'date'})}${field('welfareName','未分类福利珠名称','盲盒福利珠')}${field('notes','整盒备注','',{wide:true,type:'textarea'})}</div>${imageField('batch','整盒盲盒图片 / 采购截图')}<div class="line-entry"><div class="flex" style="justify-content:space-between"><b>一键导入盲盒分类明细</b><button type="button" class="btn small primary" data-action="parse-blind-table">识别并填入表单</button></div><p class="sub" style="margin:6px 0">支持粘贴含表头的 Excel/WPS、CSV/TSV：名称、品类、卡数、品相、分摊成本、摆摊建议售价、散珠行情价等。</p><textarea class="textarea" name="blindTable" style="min-height:135px" placeholder="类别,名称,品类,卡数,克数,品相,数量,类型
 天然石,葡萄石圆珠,葡萄石,8mm,1.8,优选,2,优选
-木珠,檀木珠,檀木,6mm,,普通,3,福利"></textarea><input type="file" class="input" style="margin-top:8px" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain" id="blind-import-file"><div class="hint">照片截图暂不能可靠地离线识别文字，请复制原表格内容或导出CSV后导入。导入会替换当前已填的优选珠及福利珠明细，请先保存图片/草稿。</div><div id="blind-import-result" class="info" style="margin-top:8px">尚未导入</div></div><div class="field wide">${field('welfareLines','福利珠分类明细（可留空；Excel可粘贴）','',{wide:true,type:'textarea',placeholder:'名称 [Tab] 品类 [Tab] 尺寸规格 [Tab] 颗数 [Tab] 形状（可留空）'})}</div><hr class="hr"><div class="flex" style="justify-content:space-between;margin-bottom:9px"><b>优选珠（每颗独立成本）</b><div class="actions"><button class="btn small" data-action="add-blind-row">＋ 加一颗</button><button class="btn small" data-action="duplicate-blind-row">复制上一颗</button></div></div><div id="blind-rows">${blindRow({},0)}</div><div class="info">表格中「优选」会拆分为逐颗记录；「福利」会按品类聚合为零成本库存。确认总颗数与明细一致后再入库。</div>`;openModal('录入散珠盲盒',body,'save-blind','确认分摊并入库');refreshMarketEstimates()}
+木珠,檀木珠,檀木,6mm,,普通,3,福利"></textarea><input type="file" class="input" style="margin-top:8px" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain" id="blind-import-file"><div class="hint">照片截图暂不能可靠地离线识别文字，请复制原表格内容或导出CSV后导入。导入会替换当前已填的优选珠及福利珠明细，请先保存图片/草稿。</div><div id="blind-import-result" class="info" style="margin-top:8px">尚未导入</div></div><div class="field wide">${field('welfareLines','福利珠分类明细（可留空；Excel可粘贴）','',{wide:true,type:'textarea',placeholder:'名称 [Tab] 品类 [Tab] 尺寸规格 [Tab] 颗数 [Tab] 形状（可留空）'})}</div><hr class="hr"><div class="flex" style="justify-content:space-between;margin-bottom:9px"><b>优选珠（每颗独立成本）</b><div class="actions"><button class="btn small" data-action="add-blind-row">＋ 加一颗</button><button class="btn small" data-action="duplicate-blind-row">复制上一颗</button></div></div><div id="blind-rows">${blindRow({},0)}</div><div class="info">表格中「优选」会拆分为逐颗记录；「福利」会按品类聚合为零成本库存。确认总颗数与明细一致后再入库。</div>`;openModal('录入散珠盲盒',body,'save-blind','确认分摊并入库');blindDraftTouched=false;refreshMarketEstimates();setTimeout(()=>restoreBlindDraft(true).catch(err=>{if(err.message==='没有找到可恢复的盲盒草稿')blindDraftStatus('可随时保存草稿');else{console.warn('自动恢复草稿出错',err);blindDraftStatus('请点恢复草稿查看',true)}}),0)}
 
 function batchForm(){ui.batchRows=[];let body=`<div class="info">支持多行快速录入，第一列起依次为：<b>类别、名称、单价、数量、单位、渠道、备注</b>。可粘贴 Excel 的制表符分隔内容，每行一条。类别只填「配件」「耗材」或「散珠」。工具请单独使用物料表单设置折旧。</div><div class="field" style="margin-top:12px"><label>批量粘贴区</label><textarea class="textarea" name="bulk" style="min-height:190px" placeholder="配件\t龙虾扣\t0.20\t50\t个\t直播间\t银色\n耗材\t弹力线\t1.50\t20\t米\t网店\t透明\n散珠\t木珠\t0.30\t40\t颗\t批发店\t8mm"></textarea></div><div class="hint muted">单价指每单位实际进价，数量指这次买入的总单位数量。粘贴前不需要表头；图片可在入库后逐条编辑添加。</div>`;openModal('批量录入物料',body,'save-batch','校验并批量入库')}
 function bomRow(x={},index=0,locked=false){const sorted=window.HandMaterialAssist?.options(x.term||'')||state.materials.filter(m=>m.kind!=='tool');const opt=sorted.map(m=>[m.id,`${m.name}｜${m.subtype||''} ${m.shape?'·'+m.shape:''} ${m.spec||''}｜余${fmt(m.qty)}${m.unit}｜${money(m.unitCost)}/${m.unit}`]);return `<div class="flex line-entry" data-bom-row="${index}" style="align-items:flex-end"><div class="grow" style="min-width:145px">${x.term?`<div class="hint">口述：${esc(x.term)} ${esc(x.qty||'待填')}${esc(x.requestUnit||'')} · 请选具体批次</div>`:''}${sel('component','物料',x.id||'',[['','请选择物料'],...opt])}</div><div style="width:105px">${num('used','每件用量',x.qty??1,{min:0,step:'any'})}</div><button class="btn small danger" type="button" data-action="remove-bom-row" data-index="${index}" ${locked?'disabled':''}>移除</button></div>`}
@@ -602,7 +622,7 @@ async function shrinkImage(file){
   return canvas.toDataURL('image/jpeg',0.7);
  }finally{bitmap?.close?.();if(url)URL.revokeObjectURL(url)}
 }
-function updatePreview(key){const el=document.querySelector('[data-preview="'+key+'"]');if(el){el.src=safeImage(ui.images[key])||svgThumb('图');el.style.display='block'}if($('#blind-rows')&&(key==='batch'||key.startsWith('blind-')))saveBlindDraftNow()}
+function updatePreview(key){const el=document.querySelector('[data-preview="'+key+'"]');if(el){el.src=safeImage(ui.images[key])||svgThumb('图');el.style.display='block'}if($('#blind-rows')&&(key==='batch'||key.startsWith('blind-')))saveBlindDraftNow(true)}
 function handleAction(action,btn){const id=btn.dataset.id;
  switch(action){case 'go-settings':ui.tab='settings';ui.search='';render();break;
  case 'new-material':materialForm();break;case 'new-tool':materialForm(null,'tool');break;
@@ -619,6 +639,8 @@ function handleAction(action,btn){const id=btn.dataset.id;
  case 'duplicate-blind-row':{const rows=collectBlindRows();const area=$('#blind-rows');area.insertAdjacentHTML('beforeend',blindRow({...rows.at(-1),image:''},rows.length));saveBlindDraftNow();break}
  case 'parse-blind-table':try{blindPaste()}catch(e){toast('表格识别失败：'+e.message)}break;
  case 'restore-blind-draft':restoreBlindDraft().catch(err=>toast(err.message||String(err)));break;
+ case 'save-blind-draft':saveBlindDraftManually().catch(err=>toast(err.message||String(err)));break;
+ case 'reset-blind-draft':{if(!confirm('确定新建空白盲盒？上次未保存的草稿将被清除。'))break;clearBlindDraft().then(()=>blindForm()).catch(err=>toast(err.message||String(err)));break;}
  case 'remove-blind-row':{const rows=collectBlindRows();if(rows.length===1){toast('至少保留一颗优选珠');break}rows.splice(Number(btn.dataset.index),1);replaceBlindRows(rows);break}
  case 'photo-camera':window.BeadPhotoAccess.camera(async data=>{const edited=await window.BeadPhotoEditor.open(data);if(edited){ui.images[btn.dataset.key]=edited;updatePreview(btn.dataset.key);toast('照片编辑完成，保存后入库')}}).catch(e=>toast(e.message));break;
 case 'photo-paste':window.BeadPhotoAccess.clipboard(async data=>{const edited=await window.BeadPhotoEditor.open(data);if(edited){ui.images[btn.dataset.key]=edited;updatePreview(btn.dataset.key);toast('照片编辑完成')}}).catch(e=>toast(e.message));break;
@@ -640,11 +662,13 @@ case 'clear-image':ui.images[btn.dataset.key]='';updatePreview(btn.dataset.key);
  }}
 function getBomLoose(){return Array.from($$('#bom-rows [data-bom-row]')).map(r=>({id:v(r,'component'),qty:nv(r,'used')}))}
 document.addEventListener('click',event=>{if(event.target.classList?.contains('modalwrap')){event.preventDefault();closeModal();render();return}const tab=event.target.closest('[data-tab]');if(tab){ui.tab=tab.dataset.tab;ui.search='';render();window.scrollTo(0,0);return}const btn=event.target.closest('button[data-action]');if(btn&&!btn.disabled){event.preventDefault();try{handleAction(btn.dataset.action,btn)}catch(e){toast(e.message||String(e))}}});
-document.addEventListener('change',async event=>{const el=event.target;if(el.closest('#editor')&&$('#blind-rows')&&!el.matches('[data-image]'))saveBlindDraftNow();if(el.matches('#editor [data-shape-select]')){const wrapper=el.closest('.field');const box=wrapper?.querySelector('[data-shape-value]');if(box)box.value=el.value;return;}if(el.matches('#editor [data-shape-value]')){refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));return;}if(el.matches('#editor [name="name"],#editor [name="b-name"],#editor [name="subtype"],#editor [name="b-subtype"],#editor [name="beadGroup"],#editor [name="b-group"]'))refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));if(el.matches('#editor [name="subtype"],#editor [name="b-subtype"]')){const context=el.closest('[data-blind-row]')||$('#editor');const group=context.querySelector('[name="b-group"],[name="beadGroup"]');if(group){const guess=inferStoneClass(el.value);if(guess!=='待确认品类' || group.value==='待确认品类')group.value=guess;}}if(el.matches('[data-image]')){const file=el.files?.[0];if(!file)return;try{const original=await shrinkImage(file);const edited=await window.BeadPhotoEditor.open(original);if(edited){ui.images[el.dataset.image]=edited;updatePreview(el.dataset.image);toast('图片已编辑，保存条目时一并入库')}else{toast('已取消图片编辑，原图未被替换')}}catch(e){toast(e.message||String(e))}finally{el.value=''}return}
+document.addEventListener('change',async event=>{const el=event.target;if(el.closest('#editor')&&$('#blind-rows')&&!el.matches('[data-image]')){blindDraftTouched=true;saveBlindDraftNow();}if(el.matches('#editor [data-shape-select]')){const wrapper=el.closest('.field');const box=wrapper?.querySelector('[data-shape-value]');if(box)box.value=el.value;return;}if(el.matches('#editor [data-shape-value]')){refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));return;}if(el.matches('#editor [name="name"],#editor [name="b-name"],#editor [name="subtype"],#editor [name="b-subtype"],#editor [name="beadGroup"],#editor [name="b-group"]'))refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));if(el.matches('#editor [name="subtype"],#editor [name="b-subtype"]')){const context=el.closest('[data-blind-row]')||$('#editor');const group=context.querySelector('[name="b-group"],[name="beadGroup"]');if(group){const guess=inferStoneClass(el.value);if(guess!=='待确认品类' || group.value==='待确认品类')group.value=guess;}}if(el.matches('[data-image]')){const file=el.files?.[0];if(!file)return;try{const original=await shrinkImage(file);const edited=await window.BeadPhotoEditor.open(original);if(edited){ui.images[el.dataset.image]=edited;updatePreview(el.dataset.image);toast('图片已编辑，保存条目时一并入库')}else{toast('已取消图片编辑，原图未被替换')}}catch(e){toast(e.message||String(e))}finally{el.value=''}return}
  if(el.id==='blind-import-file'){const file=el.files?.[0];if(!file)return;try{required(file.size<=2*1024*1024,'表格文件不能超过2MB');const t=await file.text();const box=$('#editor [name="blindTable"]');box.value=t;toast('表格文本已载入，点击「识别并填入表单」进行核对')}catch(e){toast(e.message)}return}if(el.matches('#editor [name="beadGroup"],#editor [name="b-group"]')){const root=el.closest('[data-blind-row]')||$('#editor');const cat=root.querySelector('[name="b-subtype"], [name="subtype"]');const datalist=cat?root.querySelector('#'+cat.getAttribute('list')):null;if(datalist){datalist.innerHTML=sortedCategories(el.value,cat?.value).map(x=>`<option value="${attr(x)}"></option>`).join('')}refreshMarketEstimates();return}if(el.id==='material-filter'){ui.materialFilter=el.value;render();return}if(el.id==='stone-filter'){ui.stoneFilter=el.value;render();return}if(el.id==='sales-filter'){ui.salesFilter=el.value;render();return}if(el.matches('#editor [name="kind"]')){const existing=v($('#editor'),'id');if(existing){toast('已建物料不可改变分类');materialForm(existing);return}materialForm(null,el.value);return}if(el.matches('#editor [name="productId"]')){const p=byId(state.products,el.value);const fieldEl=$('#editor [name="price"]');if(p&&fieldEl)fieldEl.value=p.price;return}
  if(el.matches('#editor input,#editor select')){previewCost();refreshMarketEstimates()}
 });
-document.addEventListener('input',event=>{const el=event.target;if(el.closest('#editor')&&$('#blind-rows'))saveBlindDraftNow();if(el.matches('#editor [data-shape-filter]')){refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));return;}if(el.matches('#editor [name="name"],#editor [name="b-name"],#editor [name="subtype"],#editor [name="b-subtype"]'))refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));if(el.matches('#editor [name="subtype"],#editor [name="grade"],#editor [name="weight"],#editor [name="b-subtype"],#editor [name="b-grade"],#editor [name="b-weight"]'))refreshMarketEstimates();if(el.id==='search'){const start=el.selectionStart,end=el.selectionEnd;ui.search=el.value;render();const search=$('#search');if(search){search.focus();search.setSelectionRange(start,end)}return}if(el.matches('#editor input,#editor select')){previewCost();refreshMarketEstimates()}});
+document.addEventListener('input',event=>{const el=event.target;if(el.closest('#editor')&&$('#blind-rows')){blindDraftTouched=true;saveBlindDraftNow();}if(el.matches('#editor [data-shape-filter]')){refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));return;}if(el.matches('#editor [name="name"],#editor [name="b-name"],#editor [name="subtype"],#editor [name="b-subtype"]'))refreshShapeChoices(el.closest('[data-blind-row]')||$('#editor'));if(el.matches('#editor [name="subtype"],#editor [name="grade"],#editor [name="weight"],#editor [name="b-subtype"],#editor [name="b-grade"],#editor [name="b-weight"]'))refreshMarketEstimates();if(el.id==='search'){const start=el.selectionStart,end=el.selectionEnd;ui.search=el.value;render();const search=$('#search');if(search){search.focus();search.setSelectionRange(start,end)}return}if(el.matches('#editor input,#editor select')){previewCost();refreshMarketEstimates()}});
+window.addEventListener('pagehide',()=>{if($('#blind-rows'))saveBlindDraftNow(true)});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&$('#blind-rows'))saveBlindDraftNow(true)});
 document.addEventListener('submit',event=>event.preventDefault());
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ui.modal){closeModal();render()}});
 (async()=>{await openStore();render();if(storageMode==='unavailable')toast('当前浏览器无法保存数据，请换用 Chrome / Edge，切勿直接记正式账')})();
