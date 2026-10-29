@@ -44,8 +44,9 @@ async function writePhotoDraft(){
  }finally{db.close()}
 }
 function storePhotos(){
- photoWrite=photoWrite.then(writePhotoDraft).catch(err=>{console.warn("外购成品照片草稿保存失败",err);say("照片草稿暂存失败，建议先正式保存",true)});
- return photoWrite;
+ const current=photoWrite.catch(()=>{}).then(writePhotoDraft);
+ photoWrite=current.catch(()=>{});
+ return current.then(()=>true).catch(err=>{console.warn("外购成品照片草稿保存失败",err);say("照片草稿暂存失败，建议先正式保存",true);return false});
 }
 async function restorePhotos(){
  const db=await openPhotoDatabase();
@@ -81,8 +82,8 @@ function saveDraft(){
   const get=k=>section.querySelector('[data-field="'+k+'"]')?.value??"";
   return {name:get("name"),price:get("price"),qty:get("qty"),cost:get("cost"),channel:get("channel"),detail:get("detail"),sameOnline:get("sameOnline"),notes:get("notes")};
  });
- try{localStorage.setItem(OUT_DRAFT_KEY,JSON.stringify({rows,lines:$("#out-lines").value,savedAt:Date.now()}))}
- catch(e){console.warn("无法暂存外购成品草稿",e);say("草稿自动暂存失败，请先备份文字",true)}
+ try{localStorage.setItem(OUT_DRAFT_KEY,JSON.stringify({rows,lines:$("#out-lines").value,savedAt:Date.now()}));return true}
+ catch(e){console.warn("无法暂存外购成品草稿",e);say("草稿自动暂存失败，请先备份文字",true);return false}
 }
 function loadDraft(){
  try{
@@ -120,7 +121,7 @@ function draw(r={}){
 }
 function add(r){$("#out-list").insertAdjacentHTML("beforeend",draw(r))}
 function preview(id){const el=root.querySelector('[data-out-preview="'+id+'"]');if(el){el.src=photos[id]||"";el.style.display=photos[id]?"block":"none"}}
-async function edit(id,data){if(busy)return;busy=true;try{const img=await window.BeadPhotoEditor.open(data);if(img){photos[id]=img;preview(id);await storePhotos();say("照片已编辑并暂存")}}catch(e){say(e.message,true)}finally{busy=false}}
+async function edit(id,data){if(busy)return;busy=true;try{const img=await window.BeadPhotoEditor.open(data);if(img){photos[id]=img;preview(id);if(await storePhotos())say("照片已编辑并暂存")}}catch(e){say(e.message,true)}finally{busy=false}}
 async function save(){
  if(busy)return;busy=true;
  try{
@@ -155,7 +156,7 @@ root.addEventListener("click",async e=>{
   lines.forEach(line=>add(parse(line)));$("#out-lines").value="";saveDraft();storePhotos();say("已识别"+lines.length+"款，请核对");return;
  }
  if(type==="save"){await save();return}
- if(type==="draft"){saveDraft();await storePhotos();say("已尝试将文字及照片草稿保存在本机");return}
+ if(type==="draft"){const textOK=saveDraft(),photosOK=await storePhotos();if(textOK&&photosOK)say("文字与照片草稿已保存到本机");else say("草稿没有完整保存，请检查存储空间或权限",true);return}
  const row=b.closest("[data-out-row]");if(!row)return;const id=row.dataset.outRow;
  if(type==="remove"){if(busy)return;row.remove();delete photos[id];saveDraft();storePhotos();return}
  if(type==="clear"){delete photos[id];preview(id);storePhotos();return}
