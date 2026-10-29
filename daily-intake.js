@@ -27,11 +27,17 @@ function preparePurchase(raw){
  row.price=amounts.purchase;row.suggested=amounts.suggested;row.actual=amounts.actual;
  return row;
 }
+function spokenNumber(value){
+ const t=String(value||"");
+ if(/^\d+(?:\.\d+)?$/.test(t))return Number(t);
+ const n={一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9,十:10};
+ return n[t]??NaN;
+}
 function parse(raw){
  const text=T(raw).replace(/[，,。；;\n]/g," ");if(!text)throw Error("请输入日常进货描述");
  const size=window.BeadConversion.extractSize(text);
  const length=(text.match(/\d+(?:\.\d+)?\s*(?:cm|厘米|公分)/i)||[])[0]||"";
- const counts=[...text.matchAll(/(\d+(?:\.\d+)?)\s*(颗|串|个|件|包|米|厘米|克|卷|套|片)/g)];
+ const counts=[...text.matchAll(/(\d+(?:\.\d+)?|[一二两三四五六七八九十])\s*(颗|串|个|件|包|米|厘米|克|卷|套|片)/g)];
  const strand=counts.find(x=>x[2]==="串"),beads=counts.find(x=>x[2]==="颗"),other=counts.find(x=>/^(个|件|包|卷|套|米|克|片)$/.test(x[2]));
  const half=/半成品|半串|半制品/.test(text),rawStrand=/素串|毛坯串|原料串|整串|一串|串珠/.test(text),singleLoose=/散珠|单颗|散装/.test(text);
  const finished=!half&&/外购成品|买的成品|现成.{0,3}(?:手链|项链|耳环|手串|戒指)|成品(?:手链|项链|耳环|手串|戒指)|直接卖/.test(text);
@@ -41,13 +47,13 @@ function parse(raw){
  const lengthImpliesStrand=kind==="bead"&&Boolean(length)&&!singleLoose&&!beads;
  const item=kind==="finished"?(text.match(/珍珠(?:手链|项链|手串)|(?:手链|项链|手串|耳环|戒指|发夹|饰品)/)||[])[0]||"外购成品":kind==="metal"?(text.match(/龙虾扣|延长链|开口圈|耳钩|耳夹|隔珠|链条|扣头/)||[])[0]||"金属配件":kind==="supply"?(text.match(/弹力线|鱼线|铜丝|钢丝|包装袋|礼盒|绒布袋|胶水/)||[])[0]||"耗材":category||"待填写珠子名称";
  let qty,unit;
- if(finished){qty=other?Number(other[1]):strand?Number(strand[1]):1;unit="件"}
- else if(half||rawStrand||lengthImpliesStrand){qty=strand?Number(strand[1]):1;unit="串"}
- else if(beads){qty=Number(beads[1]);unit="颗"}
- else if(other){qty=Number(other[1]);unit=other[2]==="片"?"个":other[2]}
- else if(strand){qty=Number(strand[1]);unit="串"}
+ if(finished){qty=other?spokenNumber(other[1]):strand?spokenNumber(strand[1]):1;unit="件"}
+ else if(half||rawStrand||lengthImpliesStrand){qty=strand?spokenNumber(strand[1]):1;unit="串"}
+ else if(beads){qty=spokenNumber(beads[1]);unit="颗"}
+ else if(other){qty=spokenNumber(other[1]);unit=other[2]==="片"?"个":other[2]}
+ else if(strand){qty=spokenNumber(strand[1]);unit="串"}
  else{qty=1;unit=kind==="bead"?"颗":"个"}
- return {text,item,category,shape,purchaseType:half?"semi":rawStrand||lengthImpliesStrand||strand?"strand":"loose",kind,qty,unit,size,length,beads:beads?Number(beads[1]):null,half,rawStrand,price:window.LocalAssistantPriceParser?.(text)??null,source:(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||"",approx:/约\d|大概|大约|左右|估计|差不多/.test(text)};
+ return {text,item,category,shape,purchaseType:half?"semi":rawStrand||lengthImpliesStrand||strand?"strand":"loose",kind,qty,unit,size,length,beads:beads?spokenNumber(beads[1]):null,half,rawStrand,price:window.LocalAssistantPriceParser?.(text)??null,source:(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||"",approx:/约\d|大概|大约|左右|估计|差不多/.test(text)};
 }
 function previewBatch(parts){
  if(parts.length<2||parts.length>20)throw Error("每次批量录入请写2至20条，每件物料用换行或分号分开");
