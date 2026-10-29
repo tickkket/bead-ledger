@@ -59,6 +59,19 @@ shade.innerHTML=[
 '</section>'
 ].join("");
 document.body.append(shade);
+const SMART_BLIND_TEXT_KEY="bead-ledger-assistant-blind-text-v1";
+function saveSmartBlindText(){
+ try{localStorage.setItem(SMART_BLIND_TEXT_KEY,JSON.stringify({desc:$("local-desc").value,tsv:$("local-tsv").value,savedAt:Date.now()}))}
+ catch(e){console.warn("盲盒整理文本暂存失败",e)}
+}
+function restoreSmartBlindText(){
+ try{
+  const d=JSON.parse(localStorage.getItem(SMART_BLIND_TEXT_KEY)||"null");
+  if(d){$("local-desc").value=d.desc||"";$("local-tsv").value=d.tsv||""}
+ }catch(e){console.warn("盲盒整理文本读取失败",e)}
+}
+restoreSmartBlindText();
+shade.addEventListener("input",e=>{if(e.target.id==="local-desc"||e.target.id==="local-tsv")saveSmartBlindText()});
 const say=(s,isError=false)=>{const el=$("local-status");el.textContent=s;el.style.color=isError?"#b64c49":"#315e51"};
 function refreshLists(){
  const all=new Set([...(typeof BEAD_GROUPS!=="undefined"?Object.values(BEAD_GROUPS).flat():[]),...state.materials.filter(m=>m.kind==="bead").map(m=>m.subtype),...state.markets.map(m=>m.category),...(state.marketSamples||[]).map(m=>m.category)]);
@@ -158,7 +171,7 @@ function statusOf(result){
  const count=result.rows.reduce((a,x)=>a+x.qty,0),p=result.rows.filter(x=>x.status==="优选").reduce((a,x)=>a+x.qty,0),w=count-p;
  return "识别"+result.rows.length+"行，共"+count+"颗（优选"+p+"，福利"+w+"）。"+(result.summary.cost===null?"整盒实付价待填写。":"整盒实付价参考 ¥"+result.summary.cost+"（保存前核对）。")+(result.warnings.length?"\n需要核对：\n• "+result.warnings.join("\n• "):"\n已识别的字段仍需人工核对，特别是克数、规格和瑕疵。");
 }
-function parse(){meta=analyze($("local-desc").value);resultRows=meta.rows;$("local-tsv").value=toTable(meta.rows);$("local-parsed").textContent=statusOf(meta);say("文字/表格整理完成。不会自动记账。")}
+function parse(){meta=analyze($("local-desc").value);resultRows=meta.rows;$("local-tsv").value=toTable(meta.rows);saveSmartBlindText();$("local-parsed").textContent=statusOf(meta);say("文字/表格整理完成。不会自动记账。")}
 async function copy(){const t=T($("local-tsv").value);if(!t)throw Error("还没有表格");try{await navigator.clipboard.writeText(t);say("已复制，可粘贴到 Excel 或 WPS。")}catch(e){$("local-tsv").focus();$("local-tsv").select();say("复制权限不可用，已选中文本，请长按复制。")}}
 function validateBeforeImport(){
  const t=T($("local-tsv").value);if(!t)throw Error("请先整理盲盒，或直接贴入标准表格");
@@ -171,7 +184,9 @@ function validateBeforeImport(){
  return p;
 }
 function importToLedger(){
- const p=validateBeforeImport();blindForm();const el=$("editor");
+ const p=validateBeforeImport();
+ if(hasBlindDraft()&&!confirm("检测到之前未完成的盲盒草稿。继续填入会覆盖旧草稿。建议先点「恢复盲盒草稿」查看。确定继续？"))return;
+ blindForm(false);const el=$("editor");
  el.querySelector('[name="blindTable"]').value=$("local-tsv").value;
  if(meta.mode==="description"&&meta.summary.cost!==null&&meta.summary.cost!==undefined)el.querySelector('[name="total"]').value=meta.summary.cost;
  if(meta.summary.total!==null&&meta.summary.total!==undefined)el.querySelector('[name="totalQty"]').value=meta.summary.total;
