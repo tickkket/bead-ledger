@@ -4,6 +4,29 @@ const q=id=>document.getElementById(id),T=x=>String(x??"").trim(),E=x=>T(x).repl
 const BEAD_PURCHASE_TYPES=[["loose","散珠（单颗）"],["strand","素串（整串原料）"],["semi","半成品（未完成饰品）"]];
 const BEAD_PURCHASE_LABEL=Object.fromEntries(BEAD_PURCHASE_TYPES);
 let draft=null;let rememberedUnit="";let imageData="";let imageBusy=false;
+function extractLabeledAmounts(input){
+ const t=String(input||"").replace(/￥/g,"¥").replace(/[，。；;\n]/g," ");
+ const number="(\\d+(?:\\.\\d{1,3})?)",currency="(?:元|块钱|块|圆)?";
+ function pick(pattern){const m=t.match(new RegExp(pattern+"\\s*(?:是|为|大概|约|:|：|=|¥)?\\s*¥?\\s*"+number+"\\s*"+currency,"i"));return m?Number(m[1]):null}
+ const sell="(?:建议(?:卖|售价|定价|价格)?|摆摊(?:建议)?(?:卖|售价|价)?|准备卖|打算卖|想卖|标价|售价|卖价|卖出去|卖)";
+ const value="(?:实际价值|真实价值|市面价值|市场价值|参考价值|实际估值|估算价值|市值|估值|价值|值)";
+ const suggested=pick(sell),actual=pick(value);
+ const excluded=t.replace(new RegExp("(?:"+sell+"|"+value+")\\s*(?:是|为|大概|约|:|：|=|¥)?\\s*¥?\\s*\\d+(?:\\.\\d+)?\\s*(?:元|块钱|块|圆)?","gi")," ");
+ const purchase=window.LocalAssistantPriceParser?.(excluded)??null;
+ return {purchase,suggested,actual};
+}
+function splitPurchases(input){
+ const t=String(input||"").replace(/\r/g,"").trim();
+ const parts=t.replace(/(?:，|,)?\s*(?=(?:另外|此外|还有|再买(?:了|入)|又买(?:了|入)))/g,"\n")
+  .replace(/(^|\n)\s*(?:\d{1,2}[、.)．]|[一二三四五六七八九十][、.])\s*/g,"$1")
+  .split(/\n|；|;/g).map(x=>x.trim()).filter(Boolean);
+ return parts.length>1?parts:[t];
+}
+function preparePurchase(raw){
+ const row=parse(raw),amounts=extractLabeledAmounts(raw);
+ row.price=amounts.purchase;row.suggested=amounts.suggested;row.actual=amounts.actual;
+ return row;
+}
 function parse(raw){
  const text=T(raw).replace(/[，,。；;\n]/g," ");if(!text)throw Error("请输入日常进货描述");
  const size=window.BeadConversion.extractSize(text);
@@ -27,14 +50,14 @@ function parse(raw){
  return {text,item,category,shape,purchaseType:half?"semi":rawStrand||lengthImpliesStrand||strand?"strand":"loose",kind,qty,unit,size,length,beads:beads?Number(beads[1]):null,half,rawStrand,price:window.LocalAssistantPriceParser?.(text)??null,source:(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||"",approx:/约\d|大概|大约|左右|估计|差不多/.test(text)};
 }
 function preview(){
- draft=parse(q("daily-description").value);draft.conversion=window.BeadConversion.estimate({size:draft.size,length:draft.length,strands:draft.unit==="串"?draft.qty:1,spokenTotal:draft.beads,spokenApprox:draft.approx});if(draft.kind==="bead"&&draft.unit==="颗"&&!draft.beads&&draft.conversion.beadTotal)draft.qty=draft.conversion.beadTotal;const x=draft,box=q("daily-preview");box.style.display="block";
+ draft=preparePurchase(q("daily-description").value);draft.conversion=window.BeadConversion.estimate({size:draft.size,length:draft.length,strands:draft.unit==="串"?draft.qty:1,spokenTotal:draft.beads,spokenApprox:draft.approx});if(draft.kind==="bead"&&draft.unit==="颗"&&!draft.beads&&draft.conversion.beadTotal)draft.qty=draft.conversion.beadTotal;const x=draft,box=q("daily-preview");box.style.display="block";
  box.innerHTML='<label>入库类型</label><select id="daily-kind" class="local-field">'+[["bead","散珠 / 素串 / 半成品"],["metal","金属配件"],["supply","耗材包装"],["finished","外购成品（非手作）"]].map(([v,l])=>'<option value="'+v+'" '+(v===x.kind?"selected":"")+'>'+l+'</option>').join("")+'</select>'+
  '<div id="daily-purchase-type-wrap"><label>具体物料类型（可修改）</label><select class="local-field" id="daily-purchase-type">'+BEAD_PURCHASE_TYPES.map(([value,label])=>'<option value="'+value+'" '+(value===x.purchaseType?'selected':'')+'>'+label+'</option>').join('')+'</select></div>'+
  '<label>物品名称</label><input id="daily-name" class="local-field" value="'+E(x.item)+'">'+
  '<div id="daily-shape-box"><label>形状 / 珠型</label><input id="daily-shape-search" class="local-field" type="search" placeholder="输入关键词搜索珠形" style="margin-bottom:7px"><select id="daily-shape-select" class="local-field"><option value="">点击展开珠形选项</option></select><label>已选形状 / 自定义形状</label><input id="daily-shape" class="local-field" value="'+E(x.shape||'')+'" placeholder="从上方选择，或者直接输入新形状"></div>'+
  '<div class="local-row"><div class="local-narrow"><label>规格</label><input id="daily-spec" class="local-field" value="'+E([x.size,x.length].filter(Boolean).join(" · "))+'"></div><div class="local-narrow"><label>数量</label><input id="daily-qty" type="number" class="local-field" min="0.0001" step="any" value="'+x.qty+'"></div></div>'+
  '<div class="local-row"><div class="local-narrow"><label>单位</label><select class="local-field" id="daily-unit">'+["颗","串","个","件","包","卷","米","厘米","克","套"].map(v=>'<option value="'+v+'" '+(v===x.unit?"selected":"")+'>'+v+'</option>').join("")+'</select></div><div class="local-narrow"><label>实际购入总价（元）</label><input id="daily-total" class="local-field" type="number" min="0" step="any" value="'+(x.price??"")+'"></div></div>'+
- '<div class="local-row"><div class="local-narrow"><label>建议售价（元/当前单位）</label><input id="daily-suggested-price" class="local-field" type="number" min="0" step="any" placeholder="可留空"></div><div class="local-narrow"><label>实际价值参考（元/当前单位）</label><input id="daily-actual-value" class="local-field" type="number" min="0" step="any" placeholder="可留空"></div></div>'+
+ '<div class="local-row"><div class="local-narrow"><label>建议售价（元/当前单位）</label><input id="daily-suggested-price" class="local-field" type="number" min="0" step="any" placeholder="可留空" value="'+(x.suggested??"")+'"></div><div class="local-narrow"><label>实际价值参考（元/当前单位）</label><input id="daily-actual-value" class="local-field" type="number" min="0" step="any" placeholder="可留空" value="'+(x.actual??"")+'"></div></div>'+
  '<div class="local-row"><div class="local-narrow"><label>单颗克重（g，估值可用）</label><input id="daily-bead-weight" class="local-field" type="number" min="0" step="any" placeholder="可留空"></div><div class="local-narrow"><div id="daily-value-preview" class="local-help" aria-live="polite"></div></div></div>'+
  '<div id="daily-bead-convert" class="local-help"></div>'+
  '<div class="local-row"><div class="local-narrow"><label>购买渠道 *</label><select id="daily-source-channel" class="local-field">'+purchaseSourceOptions(splitPurchaseSource(x.source).channel)+'</select><input id="daily-source-detail" class="local-field" placeholder="店铺、直播间等补充说明" value="'+E(splitPurchaseSource(x.source).detail)+'"></div><div class="local-narrow"><label>日期</label><input id="daily-date" type="date" class="local-field" value="'+today()+'"></div></div>'+
@@ -175,5 +198,5 @@ q("local-daily").addEventListener("click",e=>{
  if(a==="remove-image"){imageData="";if(q("daily-image-file"))q("daily-image-file").value="";if(q("daily-image-camera"))q("daily-image-camera").value="";if(q("daily-image-preview")){q("daily-image-preview").src="";q("daily-image-preview").style.display="none";}q("daily-image-status").textContent="图片已移除";return;}if(a==="clear"){imageData="";draft=null;q("daily-description").value="";q("daily-preview").style.display="none";return}
  Promise.resolve().then(a==="preview"?preview:save).catch(err=>q("local-status").textContent="无法完成："+err.message);
 });
-window.DailyIntake={parse};
+window.DailyIntake={parse,preparePurchase,splitPurchases,extractLabeledAmounts};
 })();
