@@ -188,6 +188,9 @@ function importToLedger(){
  const p=validateBeforeImport();
  if(hasBlindDraft()&&!confirm("检测到之前未完成的盲盒草稿。继续填入会覆盖旧草稿。建议先点「恢复盲盒草稿」查看。确定继续？"))return;
  blindForm(false);const el=$("editor");
+ const description=$("local-desc").value;
+ const channel=/闲鱼|咸鱼/.test(description)?"闲鱼":(description.match(/小红书|淘宝|拼多多|1688|抖音|微信|线下批发/)||[])[0]||"";
+ if(channel)el.querySelector('[name="sourceChannel"]').value=channel;
  el.querySelector('[name="blindTable"]').value=$("local-tsv").value;
  if(meta.mode==="description"&&meta.summary.cost!==null&&meta.summary.cost!==undefined)el.querySelector('[name="total"]').value=meta.summary.cost;
  if(meta.summary?.total!==null&&meta.summary?.total!==undefined)el.querySelector('[name="totalQty"]').value=meta.summary.total;
