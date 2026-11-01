@@ -54,7 +54,9 @@ function detect(input){
  const color=(text.match(/(?:玫瑰金色|玫瑰金|香槟金|古铜色|古银色|14K金色|18K金色|金色|银色|黑色|白K色|白金色|黄铜色)/i)||[])[0]||"";
  const normalizedType=matched.type==="四通"&&/隔(?:珠|片)/.test(text)?"四通隔珠":matched.type;
  const group=GROUPS.find(x=>x.types.some(t=>t[0]===normalizedType))?.name||matched.group;
- const name=(color&& !normalizedType.includes(color)?color:"")+normalizedType;
+ const material=(text.match(/(?:925银|黄铜|钛钢|不锈钢|合金|18K金|14K金|镀金|镀银)/i)||[])[0]||"";
+ const prefix=(material&&!color.includes(material)?material:"")+color;
+ const name=prefix+normalizedType;
  return {kind:"metal",group,type:normalizedType,name,matched:matched.synonym};
 }
 const GROUP_NAMES=GROUPS.map(x=>x.name);
