@@ -94,7 +94,8 @@ function previewBatch(parts){
   '<label>规格<input class="local-field" data-col="spec" value="'+E([x.size,x.length].filter(Boolean).join(" · "))+'"></label>'+
   '<label>数量<input type="number" min="0.0001" step="any" class="local-field" data-col="qty" value="'+qty+'"></label>'+
   '<label>单位<select class="local-field" data-col="unit">'+options(["颗","串","个","件","包","卷","米","厘米","克","套","片","条","根","对","副","支","枚","双"].map(v=>[v,v]),x.unit)+'</select></label>'+
-  '<label>购入总价（元）<input type="number" min="0" step="any" class="local-field" data-col="price" value="'+(x.price??"")+'">'+(x.priceMode==="unit"?'<small class="local-help">单价 ¥'+E(x.unitPrice)+' × '+E(x.qty)+' '+E(x.unit)+'，已换算总价；可修改</small>':'')+'</label>'+
+  '<label>识别到的单价（元/单位）<input type="number" min="0" step="any" class="local-field" data-col="unitPrice" value="'+(x.unitPrice??"")+'" placeholder="可留空，填入后可计算总价"></label>'+
+  '<label>购入总价（元）<input type="number" min="0" step="any" class="local-field" data-col="price" data-manual-price="'+(x.priceMode==="unit"?"no":"yes")+'" value="'+(x.price??"")+'">'+(x.priceMode==="unit"?'<small class="local-help">单价 ¥'+E(x.unitPrice)+' × '+E(x.qty)+' '+E(x.unit)+'，已换算总价；可修改</small>':'')+'</label>'+
   '<label>建议售价（元/单位）<input type="number" min="0" step="any" class="local-field" data-col="suggested" value="'+(x.suggested??"")+'"></label>'+
   '<label>实际价值（元/单位）<input type="number" min="0" step="any" class="local-field" data-col="actual" value="'+(x.actual??"")+'"></label>'+
   '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">单颗克重g<input type="number" min="0" step="any" class="local-field" data-col="weight" placeholder="可选"></label>'+
@@ -148,6 +149,7 @@ function preview(){
  '<div id="daily-shape-box"><label>形状 / 珠型</label><input id="daily-shape-search" class="local-field" type="search" placeholder="输入关键词搜索珠形" style="margin-bottom:7px"><select id="daily-shape-select" class="local-field"><option value="">点击展开珠形选项</option></select><label>已选形状 / 自定义形状</label><input id="daily-shape" class="local-field" value="'+E(x.shape||'')+'" placeholder="从上方选择，或者直接输入新形状"></div>'+
  '<div class="local-row"><div class="local-narrow"><label>规格</label><input id="daily-spec" class="local-field" value="'+E([x.size,x.length].filter(Boolean).join(" · "))+'"></div><div class="local-narrow"><label>数量</label><input id="daily-qty" type="number" class="local-field" min="0.0001" step="any" value="'+x.qty+'"></div></div>'+
  '<div class="local-row"><div class="local-narrow"><label>单位</label><select class="local-field" id="daily-unit">'+["颗","串","个","件","包","卷","米","厘米","克","套","片","条","根","对","副","支","枚","双"].map(v=>'<option value="'+v+'" '+(v===x.unit?"selected":"")+'>'+v+'</option>').join("")+'</select></div><div class="local-narrow"><label>实际购入总价（元）</label><input id="daily-total" class="local-field" type="number" min="0" step="any" value="'+(x.price??"")+'"></div></div>'+
+ '<div class="local-row"><div class="local-narrow"><label>识别到的单价（元/当前单位）</label><input id="daily-unit-price" class="local-field" type="number" min="0" step="any" placeholder="未明确口述单价则留空" value="'+(x.unitPrice??"")+'"></div><div class="local-narrow"><div class="local-help">口述单价保留在这里；进货总价按数量计算。若你直接修改总价，将以手填总价为准。</div></div></div>'+
  '<div class="local-row"><div class="local-narrow"><label>建议售价（元/当前单位）</label><input id="daily-suggested-price" class="local-field" type="number" min="0" step="any" placeholder="可留空" value="'+(x.suggested??"")+'"></div><div class="local-narrow"><label>实际价值参考（元/当前单位）</label><input id="daily-actual-value" class="local-field" type="number" min="0" step="any" placeholder="可留空" value="'+(x.actual??"")+'"></div></div>'+
  '<div class="local-row"><div class="local-narrow"><label>单颗克重（g，估值可用）</label><input id="daily-bead-weight" class="local-field" type="number" min="0" step="any" placeholder="可留空"></div><div class="local-narrow"><div id="daily-value-preview" class="local-help" aria-live="polite"></div></div></div>'+
  '<div id="daily-bead-convert" class="local-help"></div>'+
@@ -196,7 +198,19 @@ imageData="";
  showShapes();
 
  q("daily-kind").addEventListener("change",()=>{const kind=q("daily-kind").value;q("daily-purchase-type-wrap").style.display=kind==="bead"?"":"none";q("daily-shape-box").style.display=kind==="bead"?"":"none";q("daily-metal-category").style.display=kind==="metal"?"":"none";});q("daily-kind").dispatchEvent(new Event("change"));const onImageChange=async e=>{const file=e.target.files?.[0];if(!file)return;imageBusy=true;q("daily-image-status").textContent="正在准备图片…";try{const original=await shrinkImage(file);const edited=await window.BeadPhotoEditor.open(original);if(edited){imageData=edited;const preview=q("daily-image-preview");preview.src=edited;preview.style.display="block";q("daily-image-status").textContent="已编辑图片，确认入库后保存。";}else q("daily-image-status").textContent="已取消编辑，原有图片未改变。";}catch(err){q("daily-image-status").textContent="图片处理失败："+err.message;}finally{imageBusy=false;e.target.value="";}};q("daily-image-file").addEventListener("change",onImageChange);q("daily-image-camera").addEventListener("change",onImageChange);
- for(const el of box.querySelectorAll("#daily-qty,#daily-total"))el.addEventListener("input",costPreview);q("daily-unit").addEventListener("change",changeUnit);q("daily-bead-weight").addEventListener("input",refreshValuePreview);q("daily-name").addEventListener("change",refreshValuePreview);q("daily-kind").addEventListener("change",refreshValuePreview);rememberedUnit=x.unit;refreshValuePreview();
+ // If the user provided a per-unit price, re-calculate the full purchase total
+ // when quantity changes. Explicit manual total changes always take precedence.
+ let totalManuallyEdited=x.priceMode!=="unit";
+ const syncUnitPrice=()=>{
+  const u=q("daily-unit-price").value.trim(),qty=Number(q("daily-qty").value);
+  if(!totalManuallyEdited&&u!==""&&Number.isFinite(Number(u))&&Number(u)>=0&&Number.isFinite(qty)&&qty>0)q("daily-total").value=Number((Number(u)*qty).toFixed(8));
+  costPreview();
+ };
+ q("daily-qty").addEventListener("input",syncUnitPrice);
+ q("daily-unit-price").addEventListener("input",()=>{totalManuallyEdited=false;syncUnitPrice();});
+ q("daily-total").addEventListener("input",()=>{totalManuallyEdited=true;costPreview();});
+ q("daily-unit").addEventListener("change",()=>{changeUnit();const price=q("daily-unit-price"),qty=Number(q("daily-qty").value),total=Number(q("daily-total").value);if(price.value!==""&&qty>0&&Number.isFinite(total)){price.value=Number((total/qty).toFixed(8));totalManuallyEdited=false;}});
+ q("daily-bead-weight").addEventListener("input",refreshValuePreview);q("daily-name").addEventListener("change",refreshValuePreview);q("daily-kind").addEventListener("change",refreshValuePreview);rememberedUnit=x.unit;refreshValuePreview();
  costPreview();
  q("local-status").textContent="已整理，请核对。"+(x.beads&&x.unit==="串"?"珠子约"+x.beads+"颗，仅作为备注；库存按串计。":"");
 }
@@ -285,6 +299,18 @@ async function editBatchImage(index,src){
  const preview=q("daily-preview").querySelector('[data-batch-preview="'+index+'"]');
  if(preview){preview.src=edited;preview.style.display="block";}
 }
+// Bulk rows keep a separate unit-price field; manual edits to total are never overwritten.
+q("local-daily").addEventListener("input",e=>{
+ const el=e.target,row=el.closest("[data-purchase-row]");
+ if(!row)return;
+ const key=el.dataset.col,price=row.querySelector('[data-col="price"]');
+ if(!price)return;
+ if(key==="price"){price.dataset.manualPrice="yes";return;}
+ if(key==="unitPrice")price.dataset.manualPrice="no";
+ if(key!=="unitPrice"&&key!=="qty")return;
+ const raw=row.querySelector('[data-col="unitPrice"]')?.value?.trim()??"",qty=Number(row.querySelector('[data-col="qty"]')?.value);
+ if(price.dataset.manualPrice!=="yes"&&raw!==""&&Number.isFinite(Number(raw))&&Number(raw)>=0&&Number.isFinite(qty)&&qty>0)price.value=Number((Number(raw)*qty).toFixed(8));
+});
 q("local-daily").addEventListener("change",async e=>{
  const el=e.target.closest("[data-batch-photo]");if(!el)return;
  const file=el.files?.[0];if(!file)return;
