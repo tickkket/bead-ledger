@@ -12,8 +12,16 @@ function extractLabeledAmounts(input){
  const value="(?:实际价值|真实价值|市面价值|市场价值|参考价值|实际估值|估算价值|市值|估值|价值|值)";
  const suggested=pick(sell),actual=pick(value);
  const excluded=t.replace(new RegExp("(?:"+sell+"|"+value+")\\s*(?:是|为|大概|约|:|：|=|¥)?\\s*¥?\\s*\\d+(?:\\.\\d+)?\\s*(?:元|块钱|块|圆)?","gi")," ");
- const purchase=window.LocalAssistantPriceParser?.(excluded)??null;
- return {purchase,suggested,actual};
+ // Explicit total wins; a spoken 单价 is per-stock-unit, not the whole purchase.
+ const money="(\\d+(?:\\.\\d{1,3})?)",currencySuffix="(?:元|块钱|块|圆)?";
+ const join="\\s*(?:是|为|约|大约|:|：|=|¥|￥)?\\s*[¥￥]?\\s*";
+ const matchAmount=label=>{const m=excluded.match(new RegExp(label+join+money+"\\s*"+currencySuffix,"i"));return m?Number(m[1]):null;};
+ const explicitTotal=matchAmount("(?:进货总价|采购总价|购入总价|买入总价|购入总额|采购总额|总进价|总成本|实付(?:总价|金额)?|实际付款|支付金额|一共花(?:了)?|总共花(?:了)?|花费总额|合计金额|总价|合计)");
+ const single=matchAmount("(?:单价|单颗(?:进价|价格|成本|价)?|单个(?:进价|价格|成本|价)?|单件(?:进价|价格|成本|价)?|每(?:个|颗|件|对|只|包|串|套|组|条|片|根|支|枚|双|袋)(?:进价|价格|成本|价)?)");
+ const reverse=excluded.match(/(\d+(?:\.\d{1,3})?)\s*(?:元|块钱|块|圆)\s*(?:\/|每|一)\s*(?:个|颗|件|对|只|包|串|套|组|条|片|根|支|枚|双|袋)/);
+ const unitPrice=single??(reverse?Number(reverse[1]):null);
+ const fallback=window.LocalAssistantPriceParser?.(excluded)??null;
+ return {purchase:explicitTotal??fallback,unitPrice,explicitTotal,suggested,actual};
 }
 function splitPurchases(input){
  const t=String(input||"").replace(/\r/g,"").trim();
@@ -24,7 +32,10 @@ function splitPurchases(input){
 }
 function preparePurchase(raw){
  const row=parse(raw),amounts=extractLabeledAmounts(raw);
- row.price=amounts.purchase;row.suggested=amounts.suggested;row.actual=amounts.actual;
+ row.unitPrice=amounts.unitPrice;
+ row.priceMode=amounts.explicitTotal!==null?'total':amounts.unitPrice!==null?'unit':'inferred';
+ row.price=amounts.explicitTotal!==null?amounts.explicitTotal:amounts.unitPrice!==null?Math.round(amounts.unitPrice*row.qty*1e8)/1e8:amounts.purchase;
+ row.suggested=amounts.suggested;row.actual=amounts.actual;
  return row;
 }
 function spokenNumber(value){
@@ -38,7 +49,9 @@ function parse(raw){
  const size=window.BeadConversion.extractSize(text);
  const length=(text.match(/\d+(?:\.\d+)?\s*(?:cm|厘米|公分)/i)||[])[0]||'';
  const counts=[...text.matchAll(/(\d+(?:\.\d+)?|[一二两三四五六七八九十])\s*(颗|串|个|件|包|米|厘米|克|卷|套|片|条|根|对|副|支|枚|双)/g)];
- const strand=counts.find(x=>x[2]==='串'),beads=counts.find(x=>x[2]==='颗'),other=counts.find(x=>/^(个|件|包|卷|套|米|厘米|克|片|条|根|对|副|支|枚|双)$/.test(x[2]));
+ // 三片叶 is a style prefix, not a purchased quantity of three.
+ const quantities=counts.filter(x=>!(x[2]==='片'&&/^叶/.test(text.slice(x.index+x[0].length))));
+ const strand=quantities.find(x=>x[2]==='串'),beads=quantities.find(x=>x[2]==='颗'),other=quantities.find(x=>/^(个|件|包|卷|套|米|厘米|克|片|条|根|对|副|支|枚|双)$/.test(x[2]));
  const half=/半成品|半串|半制品/.test(text),rawStrand=/素串|毛坯串|原料串|整串|一串|串珠/.test(text),singleLoose=/散珠|单颗|散装/.test(text);
  const finished=!half&&/外购成品|买的成品|(?:成品|现成|外购|买来的).{0,8}(?:手链|项链|耳环|手串|戒指|耳夹|耳钉)|直接卖/.test(text);
  const accessory=window.MetalAccessories?.detect(text)||null;
@@ -81,7 +94,7 @@ function previewBatch(parts){
   '<label>规格<input class="local-field" data-col="spec" value="'+E([x.size,x.length].filter(Boolean).join(" · "))+'"></label>'+
   '<label>数量<input type="number" min="0.0001" step="any" class="local-field" data-col="qty" value="'+qty+'"></label>'+
   '<label>单位<select class="local-field" data-col="unit">'+options(["颗","串","个","件","包","卷","米","厘米","克","套","片","条","根","对","副","支","枚","双"].map(v=>[v,v]),x.unit)+'</select></label>'+
-  '<label>购入总价（元）<input type="number" min="0" step="any" class="local-field" data-col="price" value="'+(x.price??"")+'"></label>'+
+  '<label>购入总价（元）<input type="number" min="0" step="any" class="local-field" data-col="price" value="'+(x.price??"")+'">'+(x.priceMode==="unit"?'<small class="local-help">单价 ¥'+E(x.unitPrice)+' × '+E(x.qty)+' '+E(x.unit)+'，已换算总价；可修改</small>':'')+'</label>'+
   '<label>建议售价（元/单位）<input type="number" min="0" step="any" class="local-field" data-col="suggested" value="'+(x.suggested??"")+'"></label>'+
   '<label>实际价值（元/单位）<input type="number" min="0" step="any" class="local-field" data-col="actual" value="'+(x.actual??"")+'"></label>'+
   '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">单颗克重g<input type="number" min="0" step="any" class="local-field" data-col="weight" placeholder="可选"></label>'+
@@ -141,7 +154,7 @@ function preview(){
  '<div class="local-row"><div class="local-narrow"><label>购买渠道 *</label><select id="daily-source-channel" class="local-field">'+purchaseSourceOptions(splitPurchaseSource(x.source).channel)+'</select><input id="daily-source-detail" class="local-field" placeholder="店铺、直播间等补充说明" value="'+E(splitPurchaseSource(x.source).detail)+'"></div><div class="local-narrow"><label>日期</label><input id="daily-date" type="date" class="local-field" value="'+today()+'"></div></div>'+
  '<div class="di-full"><label>物料 / 成品图片（可选）</label><div class="di-photo-grid"><div class="di-photo-cell"><label>从相册选择</label><input id="daily-image-file" type="file" accept="image/*" class="di-file"></div><div class="di-photo-cell"><label>用相机拍照</label><input id="daily-image-camera" type="file" accept="image/*" capture="environment" class="di-file"></div></div><div class="local-row" style="margin:7px 0"><button type="button" class="local-btn main" data-daily="camera-api">📷 网页相机（备用）</button><button type="button" class="local-btn" data-daily="paste-photo">粘贴已复制图片</button></div><div class="di-photo-preview"><img id="daily-image-preview" alt="进货图片预览" style="display:none;width:86px;height:86px;object-fit:cover;border-radius:10px"><div class="di-photo-info"><div id="daily-image-status" class="local-help">未选择图片</div><button type="button" class="local-btn" data-daily="edit-photo">✎ 编辑图片</button><button type="button" class="local-btn" data-daily="remove-image">移除图片</button></div></div></div>'+
  '<label>备注</label><textarea id="daily-notes" class="local-field">'+E(x.text)+'</textarea>'+
- '<div id="daily-cost" class="local-help"></div><button class="local-btn main" data-daily="save">核对后确认入库</button>';
+ '<div id="daily-cost" class="local-help"></div>'+(x.priceMode==="unit"?'<div class="local-help">已按口述单价 ¥'+E(x.unitPrice)+' × '+E(x.qty)+' '+E(x.unit)+' 计算总价；数量或总价可手动更改，请核对。</div>':'')+'<button class="local-btn main" data-daily="save">核对后确认入库</button>';
 imageData="";
  // Compact after rendering: existing pair rows remain two columns; single fields are grouped into two/three columns.
  const layoutGrid=document.createElement("div");layoutGrid.className="di-grid";
