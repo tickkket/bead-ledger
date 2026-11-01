@@ -3,7 +3,7 @@
 const root=document.getElementById("local-out");if(!root)return;
 const $=s=>root.querySelector(s);
 const escape=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const channels=["","小红书","淘宝","拼多多","1688","抖音","微信","线下批发","其他"];
+const channels=["","小红书","淘宝","拼多多","1688","闲鱼","抖音","微信","线下批发","其他"];
 let next=0,busy=false,photos={};
 root.innerHTML='<label>每行一款外购成品</label><textarea class="local-field" id="out-lines" rows="3" placeholder="珍珠耳夹3对，进价12元，售价39元；水晶手串2件，进价25元，售价68元"></textarea><div class="local-row"><button type="button" class="local-btn" data-out="parse">识别多款</button><button type="button" class="local-btn" data-out="add">＋ 加一款</button><button type="button" class="local-btn" data-out="draft">保存草稿</button></div><div id="out-list"></div><button type="button" class="local-btn main" data-out="save">核对后批量入库</button><div id="out-msg" class="local-result" role="status"></div>';
 const say=(s,error)=>{const x=$("#out-msg");x.textContent=s;x.style.color=error?"#b44545":"#315e51"};
@@ -16,8 +16,8 @@ function parse(t){
  const totalCost=find(/(?:总进价|进货总价|采购总价|总成本|购入总价)\s*(?:为|是|：|:|¥)?\s*(\d+(?:\.\d+)?)/);
  const cost=totalCost!==null&&!/(?:每件|单件|每对|每套)\s*(?:进价|成本)/.test(t)?Number((totalCost/qty).toFixed(4)):unitCost;
  const price=find(/(?:建议售价|售价|卖价|定价|打算卖|准备卖|想卖|卖)\s*(?:为|是|：|:|¥)?\s*(\d+(?:\.\d+)?)/);
- const channel=channels.find(x=>x&&x!=="其他"&&t.includes(x))||"";
- const name=t.replace(/(?:每件|单件|每对|每套)?\s*(?:总进价|进货总价|采购总价|总成本|购入总价|进价|买价|成本|拿货价|建议售价|售价|卖价|定价|打算卖|准备卖|想卖|卖)\s*(?:为|是|：|:|¥)?\s*\d+(?:\.\d+)?\s*(?:元|块)?/g," ").replace(/(?:\d+|[一二两三四五六七八九十])\s*(?:件|个|条|对|副|套|双)/g," ").replace(/小红书|淘宝|拼多多|1688|抖音|微信|线下批发|外购|买了|进了/g," ").replace(/[，,。]/g," ").trim();
+ const channel=/闲鱼|咸鱼/.test(t)?"闲鱼":channels.find(x=>x&&x!=="其他"&&t.includes(x))||"";
+ const name=t.replace(/(?:每件|单件|每对|每套)?\s*(?:总进价|进货总价|采购总价|总成本|购入总价|进价|买价|成本|拿货价|建议售价|售价|卖价|定价|打算卖|准备卖|想卖|卖)\s*(?:为|是|：|:|¥)?\s*\d+(?:\.\d+)?\s*(?:元|块)?/g," ").replace(/(?:\d+|[一二两三四五六七八九十])\s*(?:件|个|条|对|副|套|双)/g," ").replace(/小红书|淘宝|拼多多|1688|闲鱼|咸鱼|抖音|微信|线下批发|外购|买了|进了/g," ").replace(/[，,。]/g," ").trim();
  return {name,qty,cost:cost??"",price:price??"",channel};
 }
 const OUT_DRAFT_KEY="bead-ledger-out-batch-draft-v1";
