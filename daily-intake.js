@@ -55,7 +55,7 @@ function parse(raw){
  else if(other){qty=spokenNumber(other[1]);unit=other[2]}
  else if(strand){qty=spokenNumber(strand[1]);unit='串'}
  else{qty=1;unit=kind==='bead'?'颗':'个'}
- return {text,item,category,shape,accessoryGroup:accessory?.group||'',accessoryType:accessory?.type||'',purchaseType:half?'semi':rawStrand||lengthImpliesStrand||strand?'strand':'loose',kind,qty,unit,size,length,beads:beads?spokenNumber(beads[1]):null,half,rawStrand,price:window.LocalAssistantPriceParser?.(text)??null,source:(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||'',approx:/约\d|大概|大约|左右|估计|差不多/.test(text)};
+ return {text,item,category,shape,accessoryGroup:accessory?.group||'',accessoryType:accessory?.type||'',purchaseType:half?'semi':rawStrand||lengthImpliesStrand||strand?'strand':'loose',kind,qty,unit,size,length,beads:beads?spokenNumber(beads[1]):null,half,rawStrand,price:window.LocalAssistantPriceParser?.(text)??null,source:/闲鱼|咸鱼/.test(text)?'闲鱼':(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||'',approx:/约\d|大概|大约|左右|估计|差不多/.test(text)};
 }
 
 function previewBatch(parts){
@@ -71,6 +71,8 @@ function previewBatch(parts){
   '<div class="di-batch-grid">'+
   '<label>物品名称<input class="local-field" data-col="name" value="'+E(x.item)+'"></label>'+
   '<label>类型<select class="local-field" data-col="kind">'+options([["bead","珠子物料"],["metal","金属配件"],["supply","耗材"],["finished","外购成品"]],x.kind)+'</select></label>'+
+  '<label>购买渠道<select class="local-field" data-col="channel">'+purchaseSourceOptions(splitPurchaseSource(x.source).channel)+'</select></label>'+
+  '<label>渠道补充备注<input class="local-field" data-col="sourceDetail" value="'+E(splitPurchaseSource(x.source).detail)+'" placeholder="卖家/店铺，可留空"></label>'+
   '<label class="di-metal-field" style="display:'+(x.kind==='metal'?'':'none')+'">配件分类<select class="local-field" data-col="accessoryGroup">'+options([['','请选择分类'],...window.MetalAccessories.GROUP_NAMES.map(g=>[g,g])],x.accessoryGroup)+'</select></label>'+
   '<label class="di-metal-field" style="display:'+(x.kind==='metal'?'':'none')+'">具体配件名称<input class="local-field" data-col="accessoryType" value="'+E(x.accessoryType||'')+'" placeholder="可修改 / 自定义"></label>'+
   '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">具体类型<select class="local-field" data-col="purchaseType">'+options(BEAD_PURCHASE_TYPES,x.purchaseType)+'</select></label>'+
@@ -86,18 +88,20 @@ function previewBatch(parts){
   '</div><label>照片（可选）<input type="file" accept="image/*" class="local-field" data-batch-photo="'+i+'"></label><img data-batch-preview="'+i+'" alt="照片" style="display:none;width:64px;height:64px;object-fit:cover;border-radius:8px"><div class="local-help">'+E(x.text)+'</div></section>';
  };
  container.innerHTML='<div class="local-help">识别到 '+parts.length+' 笔进货。逐条核对价格、类型和数量后一起保存。</div>'+
- '<div class="di-batch-grid"><label>购买渠道（必选）<select class="local-field" id="batch-source">'+purchaseSourceOptions(batchDraft.find(x=>x.source)?.source||"")+'</select></label><label>店铺备注<input id="batch-source-detail" class="local-field" placeholder="可选"></label><label>进货日期<input id="batch-date" class="local-field" type="date" value="'+today()+'"></label></div>'+
+ '<div class="di-batch-grid"><label>统一渠道（未单独填写时使用）<select class="local-field" id="batch-source">'+purchaseSourceOptions(batchDraft.find(x=>x.source)?.source||"")+'</select></label><label>统一渠道补充备注<input id="batch-source-detail" class="local-field" placeholder="可选"></label><label>进货日期<input id="batch-date" class="local-field" type="date" value="'+today()+'"></label></div>'+
  '<div id="batch-items">'+batchDraft.map(row).join("")+'</div><button class="local-btn main" type="button" data-batch="save">核对后批量入库</button>';
  q("local-status").textContent="";
 }
 async function saveBatchIntake(){
- const source=makePurchaseSource(q("batch-source").value,q("batch-source-detail").value),date=q("batch-date").value;
+ const sharedChannel=q("batch-source").value,sharedDetail=q("batch-source-detail").value,date=q("batch-date").value;
  if(!date||date>today())throw Error("请核对进货日期");
  const rows=[...q("batch-items").querySelectorAll("[data-purchase-row]")];
  if(!rows.length)throw Error("请至少保留一条进货");
  const value=(root,key)=>root.querySelector('[data-col="'+key+'"]')?.value?.trim()??"";
  const entries=rows.map((root,i)=>{
   const name=value(root,"name"),kind=value(root,"kind"),group=value(root,"group"),purchaseType=value(root,"purchaseType"),accessoryGroup=value(root,"accessoryGroup"),accessoryType=value(root,"accessoryType"),unit=value(root,"unit"),qty=Number(value(root,"qty")),raw=value(root,"price"),purchase=Number(raw);
+  const chosenChannel=value(root,"channel")||sharedChannel,chosenDetail=value(root,"sourceDetail")||(chosenChannel===sharedChannel?sharedDetail:"");
+  const source=makePurchaseSource(chosenChannel,chosenDetail);
   if(!name||name.startsWith("待填写"))throw Error("第"+(i+1)+"条请填写准确名称");
   if(!Number.isFinite(qty)||qty<=0)throw Error("第"+(i+1)+"条数量无效");
   if(raw===""||!Number.isFinite(purchase)||purchase<0)throw Error("第"+(i+1)+"条需要明确的进价");
