@@ -37,14 +37,14 @@ for(const group of GROUPS)for(const [type,words] of group.types){
 }
 ALIASES.sort((a,b)=>b.synonym.length-a.synonym.length||b.type.length-a.type.length);
 const materialWords=/不锈钢|合金|金属|黄铜|铜制|银色|金色|玫瑰金|镀金|镀银|14k|18k|925银|钢色|钛钢/i;
-const gemstoneWords=/白水晶|紫水晶|黄水晶|粉水晶|珍珠|翡翠|和田玉|玛瑙|玉髓|萤石|碧玺|绿松石|青金石|拉长石|月光石|菩提|木珠|水晶珠|石榴石|海蓝宝/;
+const gemstoneWords=/天然石|晶石|水晶|白水晶|紫水晶|黄水晶|粉水晶|珍珠|翡翠|和田玉|玛瑙|玉髓|萤石|碧玺|绿松石|青金石|拉长石|月光石|菩提|木珠|水晶珠|石榴石|海蓝宝/;
 const supplyWords=/弹力线|水晶线|鱼线|铜丝|钢丝|包装袋|礼盒|绒布袋|胶水|耗材|工具/;
 function detect(input){
  const text=String(input||"").trim();
  if(!text)return null;
  if(supplyWords.test(text)&&!/(?:金属配件|连接配件|饰品配件)/.test(text))return null;
  const matched=ALIASES.find(x=>text.toLowerCase().includes(x.synonym.toLowerCase()));
- if(!matched)return null;
+ if(!matched){return /金属配件|五金配件|饰品金属配件/.test(text)?{kind:'metal',group:'',type:'',name:'金属配件',matched:''}:null}
  const explicitMetal=materialWords.test(text)||/(?:配件|连接件|五金|镀层)/.test(text);
  // Natural-stone bead shapes can overlap with metal separators and curved tubes.
  if(gemstoneWords.test(text)&&!explicitMetal){
