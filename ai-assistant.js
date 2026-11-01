@@ -50,7 +50,7 @@ shade.innerHTML=[
 '<datalist id="local-categories"></datalist>',
 '<div class="local-row"><div class="local-narrow"><label>参考克价最低（元/g）</label><input id="local-low" class="local-field" type="number" min="0.01" step="any" placeholder="3.5"></div><div class="local-narrow"><label>参考克价最高（元/g）</label><input id="local-high" class="local-field" type="number" min="0.01" step="any" placeholder="5"></div></div>',
 '<div class="local-row"><div class="local-narrow"><label>来源渠道 *</label><select id="local-source-channel" class="local-field">'+purchaseSourceOptions()+'</select><input id="local-source-detail" class="local-field" placeholder="具体店铺 / 直播间"></div><div class="local-narrow"><label>报价日期</label><input id="local-date" type="date" class="local-field"></div></div>',
-'<datalist id="local-sources"><option value="小红书"></option><option value="淘宝"></option><option value="拼多多"></option><option value="1688"></option><option value="线下批发"></option><option value="采购实付"></option></datalist>',
+'<datalist id="local-sources"><option value="小红书"></option><option value="淘宝"></option><option value="拼多多"></option><option value="1688"></option><option value="闲鱼"></option><option value="线下批发"></option><option value="采购实付"></option></datalist>',
 '<label>报价链接或可核对的原始依据（可留空）</label><input id="local-url" class="local-field" placeholder="https://... / 订单编号或截图描述">',
 '<div class="local-row"><button class="local-btn main" data-local="add-price">保存这条报价并更新参考区间</button><button class="local-btn" data-local="pick-market">从已有珠子选择品类</button></div>',
 '<div class="local-row"><div class="local-narrow"><label>查看品类</label><input id="local-filter" class="local-field" list="local-categories" placeholder="全部"></div><button class="local-btn" data-local="refresh">刷新记录</button></div>',
@@ -116,7 +116,7 @@ function extractNumbers(raw){
  return {total,premium,welfare,cost};
 }
 function cleanChunk(raw){
- return T(raw.replace(/^(?:(?:今天|这次|刚刚|我)?(?:从)?(?:小红书|淘宝|1688|拼多多)?(?:直播间)?(?:盲盒)?(?:买了|买的|购买了|我买了|我挑了|挑了|优选|里面有|有|一共|共计|共)?(?:的)?\s*)+/,""));
+ return T(raw.replace(/^(?:(?:今天|这次|刚刚|我)?(?:从)?(?:小红书|淘宝|1688|拼多多|闲鱼|咸鱼)?(?:直播间)?(?:盲盒)?(?:买了|买的|购买了|我买了|我挑了|挑了|优选|里面有|有|一共|共计|共)?(?:的)?\s*)+/,""));
 }
 function findBeads(fragment){
  const termsList=terms();const hits=[];
@@ -213,7 +213,7 @@ function parseQuick(raw){
  if(total===null||!Number.isFinite(total)||total<0)throw Error("没有明确识别到实际购入价。可说“进价29块”“花了29元”或“29买的”等。");
  if(count!==null&&(!Number.isInteger(count)||count<1||count>10000))throw Error("颗数不在合理范围，请核对");
  const descriptor=length?length[1]+"cm":null;
- return {category,shape:detectBeadShape(text,inferStoneClass(category),category,category),total,count,approx,size,length:descriptor,strandCount:strandCount||1,raw:T(raw),source:(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||""};
+ return {category,shape:detectBeadShape(text,inferStoneClass(category),category,category),total,count,approx,size,length:descriptor,strandCount:strandCount||1,raw:T(raw),source:/闲鱼|咸鱼/.test(text)?"闲鱼":(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||""};
 }
 function quickPreview(){
  const p=parseQuick($("local-desc").value);meta.quick=p;
