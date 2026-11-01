@@ -9,7 +9,7 @@ function find(query){
  const terms=query.toLowerCase().trim().split(/\s+/).filter(Boolean);if(!terms.length)return [];
  return entries().filter(x=>{
   const p=x.item;
-  const hay=[p.name,p.subtype,p.beadGroup,p.spec,p.shape,p.source,p.notes,p.craftType,p.craftSize,x.kind,p.type==="out"?"外购成品":"手作成品"].join(" ").toLowerCase();
+  const hay=[p.name,p.subtype,p.beadGroup,p.accessoryGroup,p.accessoryType,p.spec,p.shape,p.source,p.notes,p.craftType,p.craftSize,x.kind,p.type==="out"?"外购成品":"手作成品"].join(" ").toLowerCase();
   return terms.every(t=>hay.includes(t));
  });
 }
