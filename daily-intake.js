@@ -40,7 +40,7 @@ function parse(raw){
  const counts=[...text.matchAll(/(\d+(?:\.\d+)?|[一二两三四五六七八九十])\s*(颗|串|个|件|包|米|厘米|克|卷|套|片|条|根|对|副|支|枚|双)/g)];
  const strand=counts.find(x=>x[2]==='串'),beads=counts.find(x=>x[2]==='颗'),other=counts.find(x=>/^(个|件|包|卷|套|米|厘米|克|片|条|根|对|副|支|枚|双)$/.test(x[2]));
  const half=/半成品|半串|半制品/.test(text),rawStrand=/素串|毛坯串|原料串|整串|一串|串珠/.test(text),singleLoose=/散珠|单颗|散装/.test(text);
- const finished=!half&&/外购成品|买的成品|现成.{0,3}(?:手链|项链|耳环|手串|戒指|耳夹)|成品(?:手链|项链|耳环|手串|戒指|耳夹)|直接卖/.test(text);
+ const finished=!half&&/外购成品|买的成品|(?:成品|现成|外购|买来的).{0,8}(?:手链|项链|耳环|手串|戒指|耳夹|耳钉)|直接卖/.test(text);
  const accessory=window.MetalAccessories?.detect(text)||null;
  const kind=finished?'finished':accessory?'metal':/弹力线|水晶线|鱼线|铜丝|钢丝|包装袋|礼盒|绒布袋|胶水|耗材/.test(text)?'supply':'bead';
  const words=['淡水珍珠','海水珍珠','仿珍珠','珍珠','贝珠','黄水晶','黑发晶','红胶花','虎眼石','月光石','白水晶','粉水晶','紫水晶','葡萄石','萤石','紫萤石','玛瑙','碧玺','菩提','檀木','木珠','米珠'];
