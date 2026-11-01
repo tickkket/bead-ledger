@@ -37,7 +37,8 @@ shade.innerHTML=[
 '<label>描述盲盒 / 粘贴表格</label>',
 '<textarea id="local-desc" class="local-field" placeholder="今天小红书盲盒实付28元，共12颗，挑出8颗优选。黄水晶卡17无棉无裂1颗，黑发晶卡10微棉2颗，剩下4颗是福利珠……"></textarea>',
 '<div class="local-row"><button class="local-btn" data-local="parse">整理成表格</button><button class="local-btn" data-local="copy">复制表格</button><button class="local-btn" data-local="import">填入盲盒</button><button class="local-btn main" data-local="recover-blind">恢复盲盒草稿</button></div>',
-'<label>或者上传表格截图（免费本机 OCR）</label><input id="local-photo" class="local-field" type="file" accept="image/*">',
+'<label>表格截图（免费本机 OCR，选图后可裁剪标记）</label><input id="local-photo" class="local-field" type="file" accept="image/*">',
+'<div class="local-row"><button type="button" class="local-btn" data-local="ocr-camera">📷 拍照（点按聚焦）</button><button type="button" class="local-btn" data-local="ocr-edit">裁剪 / 画笔标记</button><button type="button" class="local-btn" data-local="ocr-clear">清除照片</button></div><img id="local-photo-preview" alt="截图预览" style="display:none;width:90px;height:90px;object-fit:cover;border-radius:8px">',
 '<div class="local-row"><button class="local-btn" data-local="ocr">识别图片文字</button><span class="local-help">首次识别需联网加载，结果请核对。</span></div>',
 '<label>识别 / 整理结果（可编辑，再确认入库）</label>',
 '<textarea id="local-tsv" class="local-field" spellcheck="false" placeholder="标准格式的制表符表格将在这里显示"></textarea>',
@@ -323,9 +324,29 @@ function chooseCategory(){
  $("local-kind").value=items[0];say("已选第一种已录入珠子，可从输入框下拉或搜索修改。");
 }
 async function run(task){if(busy)return;busy=true;shade.querySelectorAll("[data-local]").forEach(x=>x.disabled=true);try{await task()}catch(e){say(e.message||String(e),true)}finally{busy=false;shade.querySelectorAll("[data-local]").forEach(x=>x.disabled=false)}}
-$("local-photo").onchange=e=>{photoFile=e.target.files?.[0]||null;say(photoFile?"已选图片："+photoFile.name:"")};
+function setOcrPhoto(data){
+ photoFile=data;
+ const img=$("local-photo-preview");
+ if(img){img.src=data||"";img.style.display=data?"block":"none";}
+ say(data?"照片已准备好，可识别图片文字。":"照片已清除");
+}
+$("local-photo").onchange=async e=>{
+ const file=e.target.files?.[0];
+ if(!file)return;
+ try{
+  const src=await shrinkImage(file);
+  const edited=await window.BeadPhotoEditor.open(src);
+  if(edited)setOcrPhoto(edited);
+  else say("已取消编辑，之前的截图保留。");
+ }catch(err){say("无法读取照片："+(err.message||err),true)}
+ finally{e.target.value="";}
+};
 function closeAssistant(){if(busy)return;shade.classList.remove("open");const launcher=document.querySelector('[data-action="open-smart-intake"]');if(launcher)launcher.focus({preventScroll:true});}
-shade.addEventListener("click",e=>{if(e.target===shade){closeAssistant();return;}const b=e.target.closest("[data-local]");if(!b)return;const action=b.dataset.local;if(action==="close"){closeAssistant();return}if(action==="tab-daily"){tab("daily");return}if(action==="tab-text"){tab("text");return}if(action==="tab-market"){tab("market");return}if(action==="tab-hand"){tab("hand");return}if(action==="tab-out"){tab("out");return}if(action==="recover-blind"){shade.classList.remove("open");ui.tab="materials";blindForm();return}const handlers={quick:quickPreview,"quick-save":saveQuick,parse,copy,import:importToLedger,ocr:ocrImage,"add-price":addPrice,"delete-price":()=>deletePrice(b.dataset.id),"pick-market":chooseCategory,refresh:renderQuotes};if(handlers[action])run(handlers[action]);});
+shade.addEventListener("click",e=>{if(e.target===shade){closeAssistant();return;}const b=e.target.closest("[data-local]");if(!b)return;const action=b.dataset.local;if(action==="close"){closeAssistant();return}if(action==="tab-daily"){tab("daily");return}if(action==="tab-text"){tab("text");return}if(action==="tab-market"){tab("market");return}if(action==="tab-hand"){tab("hand");return}if(action==="tab-out"){tab("out");return}if(action==="recover-blind"){shade.classList.remove("open");ui.tab="materials";blindForm();return}const handlers={quick:quickPreview,"quick-save":saveQuick,parse,copy,import:importToLedger,ocr:ocrImage,
+"ocr-camera":()=>window.BeadPhotoAccess.camera(async data=>{const edited=await window.BeadPhotoEditor.open(data);if(edited)setOcrPhoto(edited);}),
+"ocr-edit":async()=>{if(!photoFile)throw Error("请先选择或拍摄截图");const edited=await window.BeadPhotoEditor.open(photoFile);if(edited)setOcrPhoto(edited);},
+"ocr-clear":()=>setOcrPhoto(null),
+"add-price":addPrice,"delete-price":()=>deletePrice(b.dataset.id),"pick-market":chooseCategory,refresh:renderQuotes};if(handlers[action])run(handlers[action]);});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&shade.classList.contains("open")){e.preventDefault();closeAssistant();}});
 window.LocalAssistantPriceParser=parseSpokenPrice;
 })();
