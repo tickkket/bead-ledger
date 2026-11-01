@@ -128,7 +128,7 @@
 <script>
 'use strict';
 // 本地账本核心无网络请求；PWA shell 另行缓存。金额内部用数值，展示时保留两位小数；原始用量保持最多四位小数。
-const APP_VERSION=33, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
+const APP_VERSION=34, DB_NAME='bead-stall-ledger-v1', STORE='app', KEY='snapshot';
 const uid=()=>('i'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 const round=(v,d=4)=>Math.round((Number(v)+Number.EPSILON)*10**d)/10**d;
@@ -162,6 +162,26 @@ async function openStore(){
 function normalize(x){const base=stateInit();if(!x||typeof x!=='object')return base;for(const k of ['materials','batches','products','markets','sales','adjustments','marketHistory','marketSamples'])if(Array.isArray(x[k]))base[k]=x[k];base.settings={...base.settings,...(x.settings||{})};base.categoryUsage=x.categoryUsage&&typeof x.categoryUsage==='object'?x.categoryUsage:{};for(const m of base.materials){if(m.kind==='bead')m.beadGroup=ensureStoneClass(m.beadGroup,m.subtype||m.name)}return base}
 async function persist(){if(storageMode==='indexeddb')return new Promise((resolve,reject)=>{try{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(state,KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('数据库保存失败'));tx.onabort=()=>reject(tx.error||new Error('数据库写入中断'))}catch(e){reject(e)}});if(storageMode==='localStorage'){localStorage.setItem(DB_NAME,JSON.stringify(state));return}throw Error('此浏览器无法持久化保存，请换用 Chrome/Edge 浏览器打开')}
 async function commit(action,message='已保存'){const old=structuredClone(state);try{action();await persist();closeModal();render();toast(message)}catch(err){state=old;render();toast('操作未保存：'+(err.message||err));console.error(err)}}
+// Idempotent, transactional update of historical purchasing-source text only.
+// Does not change ordinary notes, goods, photos, costs, quantities or sales.
+async function migrateXianyuPurchaseChannels(){
+ if(storageMode==='unavailable')return {changed:0,failed:false};
+ const changed=[];
+ for(const listName of ['materials','products','batches','markets','marketHistory','marketSamples']){
+  for(const record of state[listName]||[]){
+   if(!record||typeof record.source!=='string'||!/咸鱼|闲鱼/.test(record.source))continue;
+   const previous=record.source,next=normalizeXianyuSource(previous);
+   if(previous!==next){changed.push({record,previous});record.source=next}
+  }
+ }
+ if(!changed.length)return {changed:0,failed:false};
+ try{await persist();return {changed:changed.length,failed:false}}
+ catch(error){
+  for(const item of changed)item.record.source=item.previous;
+  console.error('闲鱼购买渠道迁移未保存，原始渠道已保留',error);
+  return {changed:0,failed:true};
+ }
+}
 const byId=(arr,id)=>arr.find(o=>o.id===id);
 
 // 自定义六类珠子进货体系（业务归档，不代表专业宝石鉴定）。未知材料进待确认品类。
@@ -175,7 +195,7 @@ const BEAD_GROUPS={
 };
 const STONE_CLASS_NAMES=[...Object.keys(BEAD_GROUPS),'待确认品类'];
 const groupOpts=STONE_CLASS_NAMES.map(x=>[x,x]);
-const SOURCE_CHOICES=['小红书','淘宝','拼多多','1688','抖音','微信','线下批发','其他'];
+const SOURCE_CHOICES=['小红书','淘宝','拼多多','1688','闲鱼','抖音','微信','线下批发','其他'];
 const GRADES=[['精品','精品 / 品相佳'],['优选','优选 / 状态好'],['普通','普通 / 一般'],['瑕疵','瑕疵 / 明显瑕疵']];
 const GRADE_FACTOR={精品:1.35,优选:1,普通:.7,瑕疵:.35};
 const classRegex={
@@ -270,21 +290,37 @@ function refreshShapeChoices(context){
  if(options.includes(current))selector.value=current;
 }
 
+// Canonical platform name is「闲鱼」; retain seller details that previously included「咸鱼」.
 function splitPurchaseSource(raw){
  const text=String(raw||'').trim();
  if(!text)return {channel:'',detail:''};
- // Longer platform names take priority; don't invent a channel for unknown legacy text.
+ if(/闲鱼|咸鱼/.test(text)){
+  const separator=/^\s*([^·｜|:：—，,\/]+?)\s*[·｜|:：—，,\/]\s*(.*)$/;
+  const parts=text.match(separator);
+  const first=parts?.[1]?.trim()||'';
+  let detail=parts&&(SOURCE_CHOICES.includes(first)||first==='咸鱼')?parts[2].trim():text;
+  detail=detail.replace(/^(?:闲鱼|咸鱼)(?:平台)?(?=\s|[·｜|:：—，,\/]|$)/,'').replace(/^[\s·｜|:：—，,\/]+/,'').trim();
+  if(/^(?:闲鱼|咸鱼)(?:平台)?$/.test(detail))detail='';
+  return {channel:'闲鱼',detail};
+ }
  const options=SOURCE_CHOICES.filter(x=>x!=='其他').sort((a,b)=>b.length-a.length);
  const channel=options.find(x=>text.includes(x))||(text.includes('其他')?'其他':'');
  if(!channel)return {channel:'',detail:text};
  const detail=text.replace(channel,'').replace(/^[\s·｜|:：\-—，,\/]+|[\s·｜|:：\-—，,\/]+$/g,'').trim();
  return {channel,detail};
 }
+function normalizeXianyuSource(raw){
+ const text=String(raw||'');
+ if(!/闲鱼|咸鱼/.test(text))return text;
+ const {channel,detail}=splitPurchaseSource(text);
+ return channel+(detail?' · '+detail:'');
+}
 function makePurchaseSource(channel,detail=''){
  const selected=String(channel||'').trim(),extra=String(detail||'').trim();
- required(SOURCE_CHOICES.includes(selected),'请先从下拉菜单选择有效的购买渠道，不能仅填写店铺名称');
- required(selected!=='其他'||extra.length>0,'选择「其他」时，必须补充具体购买渠道名称');
- return selected+(extra?' · '+extra:'');
+ const canonical=selected==='咸鱼'?'闲鱼':selected;
+ required(SOURCE_CHOICES.includes(canonical),'请先从下拉菜单选择有效的购买渠道，不能仅填写店铺名称');
+ required(canonical!=='其他'||extra.length>0,'选择「其他」时，必须补充具体购买渠道名称');
+ return normalizeXianyuSource(canonical+(extra?' · '+extra:''));
 }
 function purchaseSource(root,name='source'){
  return makePurchaseSource(v(root,name+'Channel'),v(root,name+'Detail'));
@@ -783,5 +819,5 @@ document.addEventListener('submit',event=>event.preventDefault());
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ui.modal){closeModal();render()}});
 window.addEventListener('scroll',()=>{try{sessionStorage.setItem('bead-ledger-scroll-'+ui.tab,String(Math.round(window.scrollY)))}catch(e){}},{passive:true});
 window.addEventListener('pagehide',()=>{try{localStorage.setItem('bead-ledger-last-tab',ui.tab);sessionStorage.setItem('bead-ledger-scroll-'+ui.tab,String(Math.round(window.scrollY)))}catch(e){}});
-(async()=>{await openStore();render();requestAnimationFrame(()=>{try{const saved=Number(sessionStorage.getItem('bead-ledger-scroll-'+ui.tab)||0);if(Number.isFinite(saved)&&saved>0)window.scrollTo(0,saved)}catch(e){}});if(storageMode==='unavailable')toast('当前浏览器无法保存数据，请换用 Chrome / Edge，切勿直接记正式账')})();
+(async()=>{await openStore();const xianyuMigration=await migrateXianyuPurchaseChannels();render();if(xianyuMigration.failed)toast('旧购买渠道未能更新，原记录已保留');requestAnimationFrame(()=>{try{const saved=Number(sessionStorage.getItem('bead-ledger-scroll-'+ui.tab)||0);if(Number.isFinite(saved)&&saved>0)window.scrollTo(0,saved)}catch(e){}});if(storageMode==='unavailable')toast('当前浏览器无法保存数据，请换用 Chrome / Edge，切勿直接记正式账')})();
 </script><script defer src="./hand-material.js"></script><script defer src="./photo-editor.js"></script><script defer src="./photo-access.js"></script><script defer src="./ai-assistant.js"></script><script defer src="./bead-conversion.js"></script><script defer src="./metal-accessories.js"></script><script defer src="./daily-intake.js"></script><script defer src="./smart-hand.js"></script><script defer src="./smart-out.js"></script><script defer src="./ledger-search.js"></script><script defer src="./pwa.js"></script></body></html>
