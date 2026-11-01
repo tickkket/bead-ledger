@@ -98,7 +98,7 @@ function previewBatch(parts){
   '<label>建议售价（元/单位）<input type="number" min="0" step="any" class="local-field" data-col="suggested" value="'+(x.suggested??"")+'"></label>'+
   '<label>实际价值（元/单位）<input type="number" min="0" step="any" class="local-field" data-col="actual" value="'+(x.actual??"")+'"></label>'+
   '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">单颗克重g<input type="number" min="0" step="any" class="local-field" data-col="weight" placeholder="可选"></label>'+
-  '</div><label>照片（可选）<input type="file" accept="image/*" class="local-field" data-batch-photo="'+i+'"></label><img data-batch-preview="'+i+'" alt="照片" style="display:none;width:64px;height:64px;object-fit:cover;border-radius:8px"><div class="local-help">'+E(x.text)+'</div></section>';
+  '</div><label>照片（可选）<input type="file" accept="image/*" class="local-field" data-batch-photo="'+i+'"></label><div class="local-row"><button type="button" class="local-btn" data-batch="camera">📷 拍照（点按聚焦）</button><button type="button" class="local-btn" data-batch="edit">裁剪 / 标记</button><button type="button" class="local-btn" data-batch="clear">清除照片</button></div><img data-batch-preview="'+i+'" alt="照片" style="display:none;width:64px;height:64px;object-fit:cover;border-radius:8px"><div class="local-help">'+E(x.text)+'</div></section>';
  };
  container.innerHTML='<div class="local-help">识别到 '+parts.length+' 笔进货。逐条核对价格、类型和数量后一起保存。</div>'+
  '<div class="di-batch-grid"><label>统一渠道（未单独填写时使用）<select class="local-field" id="batch-source">'+purchaseSourceOptions(batchDraft.find(x=>x.source)?.source||"")+'</select></label><label>统一渠道补充备注<input id="batch-source-detail" class="local-field" placeholder="可选"></label><label>进货日期<input id="batch-date" class="local-field" type="date" value="'+today()+'"></label></div>'+
@@ -278,16 +278,27 @@ q('local-daily').addEventListener('change',event=>{
   }
  }
 });
+async function editBatchImage(index,src){
+ const edited=await window.BeadPhotoEditor.open(src);
+ if(!edited)return;
+ batchImages[index]=edited;
+ const preview=q("daily-preview").querySelector('[data-batch-preview="'+index+'"]');
+ if(preview){preview.src=edited;preview.style.display="block";}
+}
 q("local-daily").addEventListener("change",async e=>{
  const el=e.target.closest("[data-batch-photo]");if(!el)return;
  const file=el.files?.[0];if(!file)return;
- const index=el.dataset.batchPhoto;try{const image=await shrinkImage(file);const edited=await window.BeadPhotoEditor.open(image);if(edited){batchImages[index]=edited;const preview=q("daily-preview").querySelector('[data-batch-preview="'+index+'"]');if(preview){preview.src=edited;preview.style.display="block";}}}catch(err){q("local-status").textContent="图片处理失败："+err.message}finally{el.value=""}
+ const index=el.dataset.batchPhoto;try{const image=await shrinkImage(file);await editBatchImage(index,image)}catch(err){q("local-status").textContent="图片处理失败："+err.message}finally{el.value=""}
 });
 q("local-daily").addEventListener("click",e=>{
  const b=e.target.closest("[data-batch]");if(!b)return;
  const action=b.dataset.batch;
  if(action==="save"){saveBatchIntake().catch(err=>q("local-status").textContent=err.message);return}
- if(action==="remove"){b.closest("[data-purchase-row]")?.remove();return}
+ const row=b.closest("[data-purchase-row]"),index=row?.dataset.purchaseRow;
+ if(action==="remove"){row?.remove();delete batchImages[index];return}
+ if(action==="clear"){delete batchImages[index];const pic=row?.querySelector('[data-batch-preview]');if(pic){pic.src="";pic.style.display="none";}return}
+ if(action==="edit"){if(!batchImages[index]){q("local-status").textContent="请先选择或拍摄照片";return;}editBatchImage(index,batchImages[index]).catch(err=>q("local-status").textContent=err.message);return}
+ if(action==="camera"){window.BeadPhotoAccess.camera(data=>editBatchImage(index,data)).catch(err=>q("local-status").textContent=err.message);return}
 });
 q("local-daily").addEventListener("click",e=>{
  const a=e.target.closest("[data-daily]")?.dataset.daily;if(!a)return;
