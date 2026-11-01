@@ -103,7 +103,6 @@ async function saveBatchIntake(){
   if(raw===""||!Number.isFinite(purchase)||purchase<0)throw Error("第"+(i+1)+"条需要明确的进价");
   if(kind==="metal"&&!window.MetalAccessories.GROUP_NAMES.includes(accessoryGroup))throw Error("第"+(i+1)+"条请确认配件分类");
   if(kind==="bead"&&!STONE_CLASS_NAMES.includes(group))throw Error("第"+(i+1)+"条请确认珠子大类");
-  if(kind==="metal"&&!accessoryGroup)throw Error("请选择金属配件分类（例如基础连接件、隔珠隔片与连接饰件）");
  if(kind==="bead"&&!BEAD_PURCHASE_LABEL[purchaseType])throw Error("第"+(i+1)+"条请确认具体物料类型");
   if(kind==="finished"&&(unit!=="件"||!Number.isInteger(qty)))throw Error("第"+(i+1)+"条外购成品按整数件管理");
   const optional=key=>{const t=value(root,key);if(t==="")return null;const number=Number(t);if(!Number.isFinite(number)||number<0)throw Error("第"+(i+1)+"条的"+key+"不是有效金额或重量");return number};
@@ -225,6 +224,7 @@ async function save(){
  if(!draft)throw Error("请先识别进货");
  if(imageBusy)throw Error("图片正在处理，请稍后再保存");
  const kind=q("daily-kind").value,purchaseType=q("daily-purchase-type").value,name=T(q("daily-name").value),accessoryGroup=q("daily-accessory-group").value,accessoryType=T(q("daily-accessory-type").value),shape=T(q('daily-shape')?.value),spec=T(q("daily-spec").value),qty=Number(q("daily-qty").value),unit=q("daily-unit").value,rawPrice=q("daily-total").value,price=Number(rawPrice),suggestedPrice=priceInputValue("daily-suggested-price","建议售价"),actualValue=priceInputValue("daily-actual-value","实际价值参考"),beadWeight=priceInputValue("daily-bead-weight","单颗克重"),source=makePurchaseSource(q("daily-source-channel").value,q("daily-source-detail").value),date=q("daily-date").value,notes=T(q("daily-notes").value);
+ if(kind==="metal"&&!window.MetalAccessories.GROUP_NAMES.includes(accessoryGroup))throw Error("请选择配件分类，再确认入库");
  if(kind==="bead"&&!BEAD_PURCHASE_LABEL[purchaseType])throw Error("请选择具体类型：散珠、素串或半成品");
  if(!["bead","metal","supply","finished"].includes(kind))throw Error("请确认类型");
  if(!name||name.startsWith("待填写"))throw Error("请填写明确名称");
