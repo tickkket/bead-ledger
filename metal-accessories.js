@@ -39,6 +39,25 @@ ALIASES.sort((a,b)=>b.synonym.length-a.synonym.length||b.type.length-a.type.leng
 const materialWords=/不锈钢|合金|金属|黄铜|铜制|银色|金色|玫瑰金|镀金|镀银|14k|18k|925银|钢色|钛钢/i;
 const gemstoneWords=/天然石|晶石|水晶|白水晶|紫水晶|黄水晶|粉水晶|珍珠|翡翠|和田玉|玛瑙|玉髓|萤石|碧玺|绿松石|青金石|拉长石|月光石|菩提|木珠|水晶珠|石榴石|海蓝宝/;
 const supplyWords=/弹力线|水晶线|鱼线|铜丝|钢丝|包装袋|礼盒|绒布袋|胶水|耗材|工具/;
+// Preserve the complete spoken product name (including style/pattern prefix).
+// The taxonomy's standard accessory type remains a separate field.
+function extractAccessoryName(input, matchedWord){
+ let name=String(input||"").trim();
+ if(!name)return "";
+ name=name
+  .replace(/[\r\n，,。；;]+/g," ")
+  .replace(/(?:每个|每件|单个|单件|总)?(?:采购总价|进货总价|购入总价|总进价|总成本|建议售价|摆摊售价|实际价值|参考价值|进价|买价|拿货价|采购价|成本价|成本|实付|支付|花费|花了|共计|合计|总共|售价|卖价|定价|准备卖|打算卖|买入|购入)\s*(?:是|为|约|大概|[:：=])?\s*[¥￥]?\s*\d+(?:\.\d+)?\s*(?:元|块钱|块|圆)?/gi," ")
+  .replace(/[¥￥]\s*\d+(?:\.\d+)?\s*(?:元|块钱|块|圆)?/g," ")
+  .replace(/\d+(?:\.\d+)?\s*(?:元|块钱|块|圆)/g," ")
+  .replace(/(?:一共|总共|共计|合计|共|数量|有)?\s*\d+(?:\.\d+)?\s*(?:个|件|包|对|套|副|串|条|根|支|枚|片|只|双|袋|组)/g," ")
+  // Never strip Chinese-number prefixes: 三片叶招财小滴流 is a product name.
+  .replace(/(?:我)?(?:从|在|通过)?\s*(?:小红书|淘宝|拼多多|1688|闲鱼|咸鱼|抖音|微信|线下批发)(?:平台|直播间|店铺)?(?:上|里|的)?(?:购买了|购入了|买了|买的|买入|买|进了|下单了|拿了|淘了)?/g," ")
+  .replace(/^(?:(?:今天|昨天|刚刚|刚才|这次|这回|我)?(?:又|还)?(?:买了|买的|购买了|购入了|入手了|进了|进货了|拿了|淘了)|另外|还有)\s*/g,"")
+  .replace(/(?:是|的|买的|购买的|入的|进的|入手的|拿货的)\s*$/g,"")
+  .replace(/^[\s:：、·｜|—\-]+|[\s:：、·｜|—\-]+$/g,"")
+  .replace(/\s{2,}/g," ").trim();
+ return matchedWord&&name.toLowerCase().includes(matchedWord.toLowerCase())?name:"";
+}
 function detect(input){
  const text=String(input||"").trim();
  if(!text)return null;
@@ -56,7 +75,7 @@ function detect(input){
  const group=GROUPS.find(x=>x.types.some(t=>t[0]===normalizedType))?.name||matched.group;
  const material=(text.match(/(?:925银|黄铜|钛钢|不锈钢|合金|18K金|14K金|镀金|镀银)/i)||[])[0]||"";
  const prefix=(material&&!color.includes(material)?material:"")+color;
- const name=prefix+normalizedType;
+ const name=extractAccessoryName(text,matched.synonym)||(prefix+normalizedType);
  return {kind:"metal",group,type:normalizedType,name,matched:matched.synonym};
 }
 const GROUP_NAMES=GROUPS.map(x=>x.name);
