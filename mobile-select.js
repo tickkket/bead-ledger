@@ -45,8 +45,12 @@
   if(!b?.classList.contains("ledger-touch-launcher")||b._sourceSelect!==s)return;
   const label=b.querySelector(".ledger-touch-current");
   if(label&&label.textContent!==textLabel(s))label.textContent=textLabel(s);
-  b.disabled=s.disabled||s.options.length===0;
-  b.hidden=!!(s.hidden||s.style.display==="none");
+  // Assigning the *same* boolean attribute can still enqueue MutationObserver
+  // records on Android/Chromium. Guard updates to prevent re-entrant redraw loops.
+  const disabled=!!(s.disabled||s.options.length===0);
+  const hidden=!!(s.hidden||s.style.display==="none");
+  if(b.disabled!==disabled)b.disabled=disabled;
+  if(b.hidden!==hidden)b.hidden=hidden;
  }
  function enhance(){
   if(isNative()){document.documentElement.classList.add("ledger-native-mode");return}
@@ -155,7 +159,10 @@
  else enhance();
  if("MutationObserver" in window){
   const observer=new MutationObserver(records=>{
-   if(records.some(r=>r.type==="childList"||r.target?.tagName==="SELECT"))schedule();
+   // Ignore mutations to our generated proxy buttons. Only actual select
+   // attribute changes or added/removed DOM nodes require enhancement.
+   if(records.some(r=>r.type==="childList"||
+     (r.type==="attributes"&&r.target?.tagName==="SELECT")))schedule();
   });
   observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:["disabled","hidden","style"]});
  }
