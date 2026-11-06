@@ -73,6 +73,19 @@ function parse(raw){
  return {text,item,category,shape,accessoryGroup:accessory?.group||'',accessoryType:accessory?.type||'',purchaseType:half?'semi':rawStrand||lengthImpliesStrand||strand?'strand':'loose',kind,qty,unit,size,length,beads:beads?spokenNumber(beads[1]):null,half,rawStrand,price:window.LocalAssistantPriceParser?.(text)??null,source:/闲鱼|咸鱼/.test(text)?'闲鱼':(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||'',approx:/约\d|大概|大约|左右|估计|差不多/.test(text)};
 }
 
+function batchShapeOptions(group,name,current="",filter=""){
+ const options=window.BeadShapeChoices?.(group,name,name,current)||[];
+ return [...new Set(options)].filter(s=>s.includes(filter)).map(s=>'<option value="'+E(s)+'">'+E(s)+'</option>').join("");
+}
+function updateBatchShapePicker(row){
+ const pick=row?.querySelector('[data-shape-pick-batch]');if(!pick)return;
+ const group=row.querySelector('[data-col="group"]')?.value||'';
+ const name=row.querySelector('[data-col="name"]')?.value||'';
+ const current=row.querySelector('[data-col="shape"]')?.value||'';
+ const filter=row.querySelector('[data-shape-filter-batch]')?.value?.trim()||'';
+ pick.innerHTML='<option value="">选择形状</option>'+batchShapeOptions(group,name,current,filter);
+ if([...pick.options].some(x=>x.value===current))pick.value=current;
+}
 function previewBatch(parts, prepared=null){
  const count=prepared?.length??parts.length;
  if(count<2||count>20)throw Error("每次批量录入请写2至20条，每件物料用换行或分号分开");
@@ -93,7 +106,7 @@ function previewBatch(parts, prepared=null){
   '<label class="di-metal-field" style="display:'+(x.kind==='metal'?'':'none')+'">具体配件名称<input class="local-field" data-col="accessoryType" value="'+E(x.accessoryType||'')+'" placeholder="可修改 / 自定义"></label>'+
   '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">具体类型<select class="local-field" data-col="purchaseType">'+options(BEAD_PURCHASE_TYPES,x.purchaseType)+'</select></label>'+
   '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">珠子大类<select class="local-field" data-col="group">'+options(STONE_CLASS_NAMES.map(v=>[v,v]),inferStoneClass(x.category||x.item))+'</select></label>'+
-  '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">形状<input class="local-field" data-col="shape" value="'+E(x.shape||"")+'"></label>'+
+  '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">形状 / 珠型（可选择或手填）<input class="local-field" type="search" data-shape-filter-batch placeholder="搜索珠形" style="margin-top:5px"><select class="local-field" data-shape-pick-batch style="margin-top:5px"><option value="">选择形状</option>'+batchShapeOptions(x.category||x.item,x.item,x.shape||"")+'</select><input class="local-field" data-col="shape" value="'+E(x.shape||"")+'" placeholder="自定义形状" style="margin-top:5px"></label>'+
   '<label>使用状态（必选）<select class="local-field" data-col="usageStatus">'+usageChoices(x.usageStatus||usageFromText(x.text))+'</select></label>'+ 
   '<label>规格<input class="local-field" data-col="spec" value="'+E([x.size,x.length].filter(Boolean).join(" · "))+'"></label>'+
   '<label>数量<input type="number" min="0.0001" step="any" class="local-field" data-col="qty" value="'+qty+'"></label>'+
@@ -287,12 +300,24 @@ async function save(){
  q("daily-description").value="";q("daily-preview").style.display="none";draft=null;imageData="";
  q("local-status").textContent="已保存；可在物料或外购成品列表中编辑照片与细节。";
 }
+q('local-daily').addEventListener('input',event=>{
+ const input=event.target.closest('[data-shape-filter-batch]');
+ if(input)updateBatchShapePicker(input.closest('[data-purchase-row]'));
+});
+q('local-daily').addEventListener('change',event=>{
+ const picker=event.target.closest('[data-shape-pick-batch]');
+ if(picker&&picker.value){
+  const input=picker.closest('[data-purchase-row]')?.querySelector('[data-col="shape"]');
+  if(input)input.value=picker.value;
+ }
+});
 q('local-daily').addEventListener('change',event=>{
  const element=event.target,root=element.closest('[data-purchase-row]');if(!root)return;
  if(element.matches('[data-col="name"]')&&root.querySelector('[data-col="kind"]')?.value==='metal'){
   const x=window.MetalAccessories?.detect(element.value);
   if(x){root.querySelector('[data-col="accessoryGroup"]').value=x.group||'';root.querySelector('[data-col="accessoryType"]').value=x.type||'';}
  }
+ if(element.matches('[data-col="group"],[data-col="name"],[data-col="shape"]'))updateBatchShapePicker(root);
  if(element.matches('[data-col="kind"]')){
   const current=element.value;
   for(const el of root.querySelectorAll('.di-bead-field'))el.style.display=current==='bead'?'':'none';
