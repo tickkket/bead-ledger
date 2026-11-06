@@ -3,6 +3,8 @@ const q=id=>document.getElementById(id),T=x=>String(x??"").trim(),E=x=>T(x).repl
 // Local constants: do not rely on separately cached index.html exposing these names.
 const BEAD_PURCHASE_TYPES=[["loose","散珠（单颗）"],["strand","素串（整串原料）"],["semi","半成品（未完成饰品）"]];
 const BEAD_PURCHASE_LABEL=Object.fromEntries(BEAD_PURCHASE_TYPES);
+const usageChoices=(selected="未用")=>["未用","已用","已卖","自戴"].map(x=>'<option value="'+x+'" '+(x===selected?'selected':'')+'>'+x+'</option>').join("");
+const usageFromText=raw=>window.BeadUsageStatusFromText?.(raw)||"未用";
 let draft=null;let rememberedUnit="";let imageData="";let imageBusy=false;let batchDraft=[];let batchImages={};
 function extractLabeledAmounts(input){
  const t=String(input||"").replace(/￥/g,"¥").replace(/[，。；;\n]/g," ");
@@ -35,7 +37,7 @@ function preparePurchase(raw){
  row.unitPrice=amounts.unitPrice;
  row.priceMode=amounts.explicitTotal!==null?'total':amounts.unitPrice!==null?'unit':'inferred';
  row.price=amounts.explicitTotal!==null?amounts.explicitTotal:amounts.unitPrice!==null?Math.round(amounts.unitPrice*row.qty*1e8)/1e8:amounts.purchase;
- row.suggested=amounts.suggested;row.actual=amounts.actual;
+ row.suggested=amounts.suggested;row.actual=amounts.actual;row.usageStatus=usageFromText(raw);
  return row;
 }
 function spokenNumber(value){
@@ -92,6 +94,7 @@ function previewBatch(parts, prepared=null){
   '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">具体类型<select class="local-field" data-col="purchaseType">'+options(BEAD_PURCHASE_TYPES,x.purchaseType)+'</select></label>'+
   '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">珠子大类<select class="local-field" data-col="group">'+options(STONE_CLASS_NAMES.map(v=>[v,v]),inferStoneClass(x.category||x.item))+'</select></label>'+
   '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">形状<input class="local-field" data-col="shape" value="'+E(x.shape||"")+'"></label>'+
+  '<label>使用状态（必选）<select class="local-field" data-col="usageStatus">'+usageChoices(x.usageStatus||usageFromText(x.text))+'</select></label>'+ 
   '<label>规格<input class="local-field" data-col="spec" value="'+E([x.size,x.length].filter(Boolean).join(" · "))+'"></label>'+
   '<label>数量<input type="number" min="0.0001" step="any" class="local-field" data-col="qty" value="'+qty+'"></label>'+
   '<label>单位<select class="local-field" data-col="unit">'+options(["颗","串","个","件","包","卷","米","厘米","克","套","片","条","根","对","副","支","枚","双"].map(v=>[v,v]),x.unit)+'</select></label>'+
@@ -114,7 +117,8 @@ async function saveBatchIntake(){
  if(!rows.length)throw Error("请至少保留一条进货");
  const value=(root,key)=>root.querySelector('[data-col="'+key+'"]')?.value?.trim()??"";
  const entries=rows.map((root,i)=>{
-  const name=value(root,"name"),kind=value(root,"kind"),group=value(root,"group"),purchaseType=value(root,"purchaseType"),accessoryGroup=value(root,"accessoryGroup"),accessoryType=value(root,"accessoryType"),unit=value(root,"unit"),qty=Number(value(root,"qty")),raw=value(root,"price"),purchase=Number(raw);
+  const name=value(root,"name"),kind=value(root,"kind"),group=value(root,"group"),purchaseType=value(root,"purchaseType"),accessoryGroup=value(root,"accessoryGroup"),accessoryType=value(root,"accessoryType"),unit=value(root,"unit"),qty=Number(value(root,"qty")),raw=value(root,"price"),purchase=Number(raw),usageStatus=value(root,"usageStatus");
+  if(!["未用","已用","已卖","自戴"].includes(usageStatus))throw Error("第"+(i+1)+"条请选择使用状态");
   const chosenChannel=value(root,"channel")||sharedChannel,chosenDetail=value(root,"sourceDetail")||(chosenChannel===sharedChannel?sharedDetail:"");
   const source=makePurchaseSource(chosenChannel,chosenDetail);
   if(!name||name.startsWith("待填写"))throw Error("第"+(i+1)+"条请填写准确名称");
@@ -127,8 +131,8 @@ async function saveBatchIntake(){
   const optional=key=>{const t=value(root,key);if(t==="")return null;const number=Number(t);if(!Number.isFinite(number)||number<0)throw Error("第"+(i+1)+"条的"+key+"不是有效金额或重量");return number};
   const suggested=optional("suggested"),actual=optional("actual"),weight=optional("weight");
   const id=uid(),createdAt=new Date().toISOString(),cost=round(purchase/qty,8),img=batchImages[root.dataset.purchaseRow]||"",spec=value(root,"spec"),shape=value(root,"shape");
-  if(kind==="finished")return {product:true,data:{id,type:"out",name,source,notes:batchDraft[Number(root.dataset.purchaseRow)]?.text||"",producedQty:qty,stock:qty,price:suggested??0,actualValue:actual,buyPrice:cost,image:img,createdAt,sameOnline:false,cost:{unit:cost,material:cost,labor:0,stall:0,tool:0}}};
-  return {product:false,data:{id,kind,name,accessoryGroup:kind==="metal"?accessoryGroup:"",accessoryType:kind==="metal"?(accessoryType||name):"",purchaseType:kind==="bead"?purchaseType:undefined,beadGroup:kind==="bead"?group:"",subtype:kind==="bead"?name:"",shape:kind==="bead"?shape:"",spec,qty,initialQty:qty,unit,unitCost:cost,totalPurchaseCost:purchase,suggestedPrice:suggested??0,actualValue:actual,actualValueUnit:actual===null?"":unit,weight:kind==="bead"?(weight??0):0,source,purchaseDate:date,notes:batchDraft[Number(root.dataset.purchaseRow)]?.text||"",image:img,createdAt,grade:"普通",flaw:"",marketGram:0,isWelfare:false}};
+  if(kind==="finished")return {product:true,data:{id,type:"out",name,usageStatus,source,notes:batchDraft[Number(root.dataset.purchaseRow)]?.text||"",producedQty:qty,stock:qty,price:suggested??0,actualValue:actual,buyPrice:cost,image:img,createdAt,sameOnline:false,cost:{unit:cost,material:cost,labor:0,stall:0,tool:0}}};
+  return {product:false,data:{id,kind,name,usageStatus,accessoryGroup:kind==="metal"?accessoryGroup:"",accessoryType:kind==="metal"?(accessoryType||name):"",purchaseType:kind==="bead"?purchaseType:undefined,beadGroup:kind==="bead"?group:"",subtype:kind==="bead"?name:"",shape:kind==="bead"?shape:"",spec,qty,initialQty:qty,unit,unitCost:cost,totalPurchaseCost:purchase,suggestedPrice:suggested??0,actualValue:actual,actualValueUnit:actual===null?"":unit,weight:kind==="bead"?(weight??0):0,source,purchaseDate:date,notes:batchDraft[Number(root.dataset.purchaseRow)]?.text||"",image:img,createdAt,grade:"普通",flaw:"",marketGram:0,isWelfare:false}};
  });
  if(!confirm("确认把 "+entries.length+" 笔进货保存到库存？\\n总进价 ¥"+entries.reduce((n,r)=>n+(r.product?r.data.buyPrice*r.data.stock:r.data.totalPurchaseCost),0).toFixed(2)))return;
  await commit(()=>{for(const entry of entries){if(entry.product)state.products.push(entry.data);else{state.materials.push(entry.data);if(entry.data.kind==="bead")usageAdd([entry.data])}}},"已批量保存 "+entries.length+" 笔进货");
@@ -150,6 +154,7 @@ function preview(){
  '<label>配件分类<select class="local-field" id="daily-accessory-group">'+[['','请选择分类'],...window.MetalAccessories.GROUP_NAMES.map(g=>[g,g])].map(([v,l])=>'<option value="'+E(v)+'" '+(v===x.accessoryGroup?'selected':'')+'>'+E(l)+'</option>').join('')+'</select></label>'+
  '<label>具体配件名称<input class="local-field" id="daily-accessory-type" value="'+E(x.accessoryType||'')+'" placeholder="例如：魔盒、四通隔珠"></label></div></div>'+
 
+ '<label>使用状态（必选）</label><select id="daily-usage-status" class="local-field">'+usageChoices(x.usageStatus||usageFromText(x.text))+'</select>'+ 
  '<label>物品名称</label><input id="daily-name" class="local-field" value="'+E(x.item)+'">'+
  '<div id="daily-shape-box"><label>形状 / 珠型</label><input id="daily-shape-search" class="local-field" type="search" placeholder="输入关键词搜索珠形" style="margin-bottom:7px"><select id="daily-shape-select" class="local-field"><option value="">点击展开珠形选项</option></select><label>已选形状 / 自定义形状</label><input id="daily-shape" class="local-field" value="'+E(x.shape||'')+'" placeholder="从上方选择，或者直接输入新形状"></div>'+
  '<div class="local-row"><div class="local-narrow"><label>规格</label><input id="daily-spec" class="local-field" value="'+E([x.size,x.length].filter(Boolean).join(" · "))+'"></div><div class="local-narrow"><label>数量</label><input id="daily-qty" type="number" class="local-field" min="0.0001" step="any" value="'+x.qty+'"></div></div>'+
@@ -259,6 +264,7 @@ function costPreview(){const qty=Number(q("daily-qty").value),val=q("daily-total
 async function save(){
  if(!draft)throw Error("请先识别进货");
  if(imageBusy)throw Error("图片正在处理，请稍后再保存");
+ const usageStatus=q("daily-usage-status").value;if(!["未用","已用","已卖","自戴"].includes(usageStatus))throw Error("请选择使用状态");
  const kind=q("daily-kind").value,purchaseType=q("daily-purchase-type").value,name=T(q("daily-name").value),accessoryGroup=q("daily-accessory-group").value,accessoryType=T(q("daily-accessory-type").value),shape=T(q('daily-shape')?.value),spec=T(q("daily-spec").value),qty=Number(q("daily-qty").value),unit=q("daily-unit").value,rawPrice=q("daily-total").value,price=Number(rawPrice),suggestedPrice=priceInputValue("daily-suggested-price","建议售价"),actualValue=priceInputValue("daily-actual-value","实际价值参考"),beadWeight=priceInputValue("daily-bead-weight","单颗克重"),source=makePurchaseSource(q("daily-source-channel").value,q("daily-source-detail").value),date=q("daily-date").value,notes=T(q("daily-notes").value);
  if(kind==="metal"&&!window.MetalAccessories.GROUP_NAMES.includes(accessoryGroup))throw Error("请选择配件分类，再确认入库");
  if(kind==="bead"&&!BEAD_PURCHASE_LABEL[purchaseType])throw Error("请选择具体类型：散珠、素串或半成品");
@@ -271,10 +277,10 @@ async function save(){
  if(!confirm("确认进货入库？\n"+name+" × "+qty+unit+"，共 ¥"+price.toFixed(2)+"\n"+(kind==="finished"?"外购成品，非手作":"物料库存")))return;
  const id=uid(),createdAt=new Date().toISOString(),cost=round(price/qty,8);
  if(kind==="finished"){
-  const entry={id,type:"out",name,producedQty:qty,stock:qty,buyPrice:cost,price:suggestedPrice??0,actualValue:actualValue??null,source,notes:notes+"；规格："+spec,image:imageData||"",sameOnline:false,createdAt,cost:{unit:cost,material:cost,labor:0,stall:0,tool:0}};
+  const entry={id,type:"out",name,usageStatus,producedQty:qty,stock:qty,buyPrice:cost,price:suggestedPrice??0,actualValue:actualValue??null,source,notes:notes+"；规格："+spec,image:imageData||"",sameOnline:false,createdAt,cost:{unit:cost,material:cost,labor:0,stall:0,tool:0}};
   await commit(()=>state.products.push(entry),"外购成品已入库（非手作）");
  }else{
-  const entry={id,kind,name,accessoryGroup:kind==="metal"?accessoryGroup:"",accessoryType:kind==="metal"?(accessoryType||name):"",purchaseType:kind==="bead"?purchaseType:undefined,shape:kind==="bead"?shape:"",subtype:kind==="bead"?(draft.category||name):"",beadGroup:kind==="bead"?inferStoneClass(draft.category||name):"",spec,qty,initialQty:qty,unit,unitCost:cost,suggestedPrice:suggestedPrice??0,actualValue:actualValue??null,actualValueUnit:actualValue!==null?unit:"",totalPurchaseCost:price,source,purchaseDate:date,notes,createdAt,image:imageData||"",grade:"普通",flaw:"",weight:kind==="bead"?(beadWeight??0):0,isWelfare:false,qtyApprox:draft.approx&&unit==="颗",approxBeadCount:draft.conversion?.beadTotal||null,diameterMm:draft.conversion?.diameterMm||null,strandLengthCm:draft.conversion?.lengthCm||null,strandCount:unit==="串"?qty:draft.conversion?.strandCount||null,marketGram:0};
+  const entry={id,kind,name,usageStatus,accessoryGroup:kind==="metal"?accessoryGroup:"",accessoryType:kind==="metal"?(accessoryType||name):"",purchaseType:kind==="bead"?purchaseType:undefined,shape:kind==="bead"?shape:"",subtype:kind==="bead"?(draft.category||name):"",beadGroup:kind==="bead"?inferStoneClass(draft.category||name):"",spec,qty,initialQty:qty,unit,unitCost:cost,suggestedPrice:suggestedPrice??0,actualValue:actualValue??null,actualValueUnit:actualValue!==null?unit:"",totalPurchaseCost:price,source,purchaseDate:date,notes,createdAt,image:imageData||"",grade:"普通",flaw:"",weight:kind==="bead"?(beadWeight??0):0,isWelfare:false,qtyApprox:draft.approx&&unit==="颗",approxBeadCount:draft.conversion?.beadTotal||null,diameterMm:draft.conversion?.diameterMm||null,strandLengthCm:draft.conversion?.lengthCm||null,strandCount:unit==="串"?qty:draft.conversion?.strandCount||null,marketGram:0};
   await commit(()=>{state.materials.push(entry);if(kind==="bead")usageAdd([entry])},"物料已入库");
  }
  if(!(kind==="finished"?state.products:state.materials).some(x=>x.id===id))return;
@@ -391,7 +397,7 @@ function previewAI(items){
   const spoken=name+" "+qty+unit+(source?" "+source:"");
   const row=preparePurchase(spoken);
   row.text=original;
-  row.item=name;row.kind=kind;row.qty=qty;row.unit=unit;row.source=source;
+  row.item=name;row.kind=kind;row.qty=qty;row.unit=unit;row.source=source;row.usageStatus=usageFromText(original);
   const inferred=window.MetalAccessories?.detect(name);
   if(kind==="metal"){
    row.accessoryGroup=window.MetalAccessories?.GROUP_NAMES?.includes(v.accessoryGroup)?v.accessoryGroup:(inferred?.group||"");
