@@ -266,6 +266,17 @@ function sortedShapes(family,current=''){
  for(const m of state.materials)if(m.kind==='bead'&&shapeFamily(m.beadGroup,m.subtype,m.name)===family&&m.shape)counts.set(m.shape,(counts.get(m.shape)||0)+1);
  return list.sort((a,b)=>(counts.get(b)||0)-(counts.get(a)||0)||(seedIndex.get(a)??999)-(seedIndex.get(b)??999)||a.localeCompare(b,'zh'));
 }
+// Shared shape vocabulary for smart single and batch intake; preserves user-defined stock shapes.
+window.BeadShapeChoices=(group='',subtype='',name='',current='')=>
+ sortedShapes(shapeFamily(group,subtype,name),current);
+window.BeadUsageStatuses=USAGE_STATUSES;
+window.BeadUsageStatusFromText=(raw)=>{
+ const s=String(raw||'');
+ if(/(?:自戴|自己戴|自留佩戴|自己佩戴)/.test(s))return '自戴';
+ if(/(?:已卖|已售|卖掉|售出|已经卖了)/.test(s))return '已卖';
+ if(/(?:已用|用掉|已使用|已经用过|已经用了)/.test(s))return '已用';
+ return '未用';
+};
 function detectBeadShape(text,group='',subtype='',name=''){
  const words=BEAD_SHAPES[shapeFamily(group,subtype,name)]||BEAD_SHAPES.stone;
  const s=String(text||'').replace(/\s+/g,'');
