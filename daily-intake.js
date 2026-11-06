@@ -58,7 +58,7 @@ function parse(raw){
  const finished=!half&&/外购成品|买的成品|(?:成品|现成|外购|买来的).{0,8}(?:手链|项链|耳环|手串|戒指|耳夹|耳钉)|直接卖/.test(text);
  const accessory=window.MetalAccessories?.detect(text)||null;
  const kind=finished?'finished':accessory?'metal':/弹力线|水晶线|鱼线|铜丝|钢丝|包装袋|礼盒|绒布袋|胶水|耗材/.test(text)?'supply':'bead';
- const words=['淡水珍珠','海水珍珠','仿珍珠','珍珠','贝珠','黄水晶','黑发晶','红胶花','虎眼石','月光石','白水晶','粉水晶','紫水晶','葡萄石','萤石','紫萤石','玛瑙','碧玺','菩提','檀木','木珠','米珠'];
+ const words=['贝类','贝壳','贝母','砗磲','淡水珍珠','海水珍珠','仿珍珠','珍珠','贝珠','黄水晶','黑发晶','红胶花','虎眼石','月光石','白水晶','粉水晶','紫水晶','葡萄石','萤石','紫萤石','玛瑙','碧玺','菩提','檀木','木珠','米珠'];
  const category=words.find(w=>text.includes(w))||crystalNickname(text)||'';
  const shape=kind==='bead'?detectBeadShape(text,inferStoneClass(category),category,category):'';
  const lengthImpliesStrand=kind==='bead'&&Boolean(length)&&!singleLoose&&!beads;
@@ -422,7 +422,7 @@ function previewAI(items){
   const spoken=name+" "+qty+unit+(source?" "+source:"");
   const row=preparePurchase(spoken);
   row.text=original;
-  row.item=name;row.kind=kind;row.qty=qty;row.unit=unit;row.source=source;row.usageStatus=usageFromText(original);
+  row.item=name;row.kind=kind;row.qty=qty;row.unit=unit;row.source=source;row.usageStatus=["未用","已用","已卖","自戴"].includes(v.usageStatus)?v.usageStatus:usageFromText(original);
   const inferred=window.MetalAccessories?.detect(name);
   if(kind==="metal"){
    row.accessoryGroup=window.MetalAccessories?.GROUP_NAMES?.includes(v.accessoryGroup)?v.accessoryGroup:(inferred?.group||"");
