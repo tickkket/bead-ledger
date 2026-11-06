@@ -14,9 +14,9 @@ panel.innerHTML='<div class="local-row" style="margin:0;justify-content:space-be
   '<button type="button" class="local-btn" id="ai-enhance-run">✨ AI 增强识别（可选）</button>'+
   '<button type="button" class="local-btn" id="ai-enhance-settings">⚙ 配置</button></div>'+
   '<div id="ai-enhance-config" hidden>'+
-  '<label>EdgeOne 个人接口地址</label><input class="local-field" id="ai-enhance-url" type="url" placeholder="https://你自己的站点域名/api/intake" value="'+escape(saved)+'" autocomplete="url">'+
-  '<label>个人访问口令（非千问/EdgeOne API Key）</label><input class="local-field" id="ai-enhance-secret" type="password" autocomplete="off" placeholder="填入在 EdgeOne 后台设置的个人口令">'+
-  '<div class="local-help">仅保存接口地址，不保存访问口令。请勿在这里粘贴 AI 模型 API Key；真正的模型密钥只放在 EdgeOne 环境变量里。</div></div>'+
+  '<label>CloudBase / EdgeOne 接口地址</label><input class="local-field" id="ai-enhance-url" type="url" placeholder="https://你自己的站点域名/api/intake" value="'+escape(saved)+'" autocomplete="url">'+
+  '<label>个人访问口令（不是模型 API Key）</label><input class="local-field" id="ai-enhance-secret" type="password" autocomplete="off" placeholder="填写在 CloudBase 云函数环境变量中设置的个人口令">'+
+  '<div class="local-help">仅保存接口地址，不保存访问口令。请勿在这里粘贴 AI 模型 API Key；真正的模型密钥只放在云函数的服务端环境变量里。</div></div>'+
   '<div id="ai-enhance-status" class="local-result" role="status" aria-live="polite" style="margin:7px 0 0"></div>';
 const firstRow=daily.querySelector('[data-daily="preview"]')?.closest(".local-row");
 if(!firstRow)return;
@@ -34,7 +34,7 @@ $("ai-enhance-run").addEventListener("click",async()=>{
  const endpointText=$("ai-enhance-url").value.trim(),secret=$("ai-enhance-secret").value.trim();
  if(!endpointText||!secret){
   $("ai-enhance-config").hidden=false;
-  return show("AI 功能尚未配置：需要你自己的 EdgeOne 接口地址和个人访问口令；本地识别仍可免费使用。",true);
+  return show("AI 功能尚未配置：需要你自己部署的 CloudBase 或 EdgeOne 接口地址和个人访问口令；本地识别仍可免费使用。",true);
  }
  let url;
  try{
