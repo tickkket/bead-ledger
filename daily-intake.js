@@ -71,9 +71,10 @@ function parse(raw){
  return {text,item,category,shape,accessoryGroup:accessory?.group||'',accessoryType:accessory?.type||'',purchaseType:half?'semi':rawStrand||lengthImpliesStrand||strand?'strand':'loose',kind,qty,unit,size,length,beads:beads?spokenNumber(beads[1]):null,half,rawStrand,price:window.LocalAssistantPriceParser?.(text)??null,source:/闲鱼|咸鱼/.test(text)?'闲鱼':(text.match(/小红书|淘宝|拼多多|1688|抖音|微信/)||[])[0]||'',approx:/约\d|大概|大约|左右|估计|差不多/.test(text)};
 }
 
-function previewBatch(parts){
- if(parts.length<2||parts.length>20)throw Error("每次批量录入请写2至20条，每件物料用换行或分号分开");
- batchDraft=parts.map(preparePurchase);batchImages={};draft=null;
+function previewBatch(parts, prepared=null){
+ const count=prepared?.length??parts.length;
+ if(count<2||count>20)throw Error("每次批量录入请写2至20条，每件物料用换行或分号分开");
+ batchDraft=prepared||parts.map(preparePurchase);batchImages={};draft=null;
  const container=q("daily-preview");container.style.display="block";
  const options=(items,selected)=>items.map(([v,name])=>'<option value="'+E(v)+'" '+(v===selected?'selected':'')+'>'+E(name)+'</option>').join("");
  const row=(x,i)=>{
@@ -101,7 +102,7 @@ function previewBatch(parts){
   '<label class="di-bead-field" style="display:'+(x.kind==='bead'?'':'none')+'">单颗克重g<input type="number" min="0" step="any" class="local-field" data-col="weight" placeholder="可选"></label>'+
   '</div><label>照片（可选）<input type="file" accept="image/*" class="local-field" data-batch-photo="'+i+'"></label><div class="local-row"><button type="button" class="local-btn" data-batch="camera">📷 拍照（点按聚焦）</button><button type="button" class="local-btn" data-batch="edit">裁剪 / 标记</button><button type="button" class="local-btn" data-batch="clear">清除照片</button></div><img data-batch-preview="'+i+'" alt="照片" style="display:none;width:64px;height:64px;object-fit:cover;border-radius:8px"><div class="local-help">'+E(x.text)+'</div></section>';
  };
- container.innerHTML='<div class="local-help">识别到 '+parts.length+' 笔进货。逐条核对价格、类型和数量后一起保存。</div>'+
+ container.innerHTML='<div class="local-help">识别到 '+count+' 笔进货。逐条核对价格、类型和数量后一起保存。</div>'+
  '<div class="di-batch-grid"><label>统一渠道（未单独填写时使用）<select class="local-field" id="batch-source">'+purchaseSourceOptions(batchDraft.find(x=>x.source)?.source||"")+'</select></label><label>统一渠道补充备注<input id="batch-source-detail" class="local-field" placeholder="可选"></label><label>进货日期<input id="batch-date" class="local-field" type="date" value="'+today()+'"></label></div>'+
  '<div id="batch-items">'+batchDraft.map(row).join("")+'</div><button class="local-btn main" type="button" data-batch="save">核对后批量入库</button>';
  q("local-status").textContent="";
@@ -137,8 +138,12 @@ async function saveBatchIntake(){
   q("local-status").textContent="已入库 "+entries.length+" 条";
  }
 }
+let aiPreviewOverride=null;
 function preview(){
- const parts=splitPurchases(q("daily-description").value);if(parts.length>1){previewBatch(parts);return;}draft=preparePurchase(parts[0]);draft.conversion=window.BeadConversion.estimate({size:draft.size,length:draft.length,strands:draft.unit==="串"?draft.qty:1,spokenTotal:draft.beads,spokenApprox:draft.approx});if(draft.kind==="bead"&&draft.unit==="颗"&&!draft.beads&&draft.conversion.beadTotal)draft.qty=draft.conversion.beadTotal;const x=draft,box=q("daily-preview");box.style.display="block";
+ const parts=splitPurchases(q("daily-description").value),aiRows=aiPreviewOverride;
+ aiPreviewOverride=null;
+ if(aiRows?aiRows.length>1:parts.length>1){previewBatch(aiRows?aiRows.map(r=>r.text):parts,aiRows);return;}
+ draft=aiRows?aiRows[0]:preparePurchase(parts[0]);draft.conversion=window.BeadConversion.estimate({size:draft.size,length:draft.length,strands:draft.unit==="串"?draft.qty:1,spokenTotal:draft.beads,spokenApprox:draft.approx});if(draft.kind==="bead"&&draft.unit==="颗"&&!draft.beads&&draft.conversion.beadTotal)draft.qty=draft.conversion.beadTotal;const x=draft,box=q("daily-preview");box.style.display="block";
  box.innerHTML='<label>入库类型</label><select id="daily-kind" class="local-field">'+[["bead","散珠 / 素串 / 半成品"],["metal","金属配件"],["supply","耗材包装"],["finished","外购成品（非手作）"]].map(([v,l])=>'<option value="'+v+'" '+(v===x.kind?"selected":"")+'>'+l+'</option>').join("")+'</select>'+
  '<div id="daily-purchase-type-wrap"><label>具体物料类型（可修改）</label><select class="local-field" id="daily-purchase-type">'+BEAD_PURCHASE_TYPES.map(([value,label])=>'<option value="'+value+'" '+(value===x.purchaseType?'selected':'')+'>'+label+'</option>').join('')+'</select></div>'+
  '<div id="daily-metal-category" class="di-full" style="display:none"><div class="di-photo-grid">'+
@@ -360,5 +365,51 @@ q("local-daily").addEventListener("click",e=>{
  if(a==="remove-image"){imageData="";if(q("daily-image-file"))q("daily-image-file").value="";if(q("daily-image-camera"))q("daily-image-camera").value="";if(q("daily-image-preview")){q("daily-image-preview").src="";q("daily-image-preview").style.display="none";}q("daily-image-status").textContent="图片已移除";return;}if(a==="clear"){imageData="";draft=null;q("daily-description").value="";q("daily-preview").style.display="none";return}
  Promise.resolve().then(a==="preview"?preview:save).catch(err=>q("local-status").textContent="无法完成："+err.message);
 });
-window.DailyIntake={parse,preparePurchase,splitPurchases,extractLabeledAmounts};
+// AI is a proposal only. It reuses the existing editable confirmation forms;
+// no stock, prices, or sales are changed until the user confirms saving.
+function previewAI(items){
+ if(!Array.isArray(items)||!items.length||items.length>20)throw Error("AI商品数量必须在1到20条之间");
+ const original=q("daily-description").value.trim();
+ if(!original)throw Error("请先输入进货描述");
+ const allowedKinds=new Set(["bead","metal","supply","finished"]);
+ const allowedUnits=new Set(["颗","串","个","件","包","卷","米","厘米","克","套","片","条","根","对","副","支","枚","双"]);
+ const allowedSources=new Set(["","小红书","淘宝","拼多多","1688","闲鱼","抖音","微信","线下批发","其他"]);
+ const amount=(value,label)=>{
+  if(value===null||value===undefined||value==="")return null;
+  const n=Number(value);
+  if(!Number.isFinite(n)||n<0||n>1e7)throw Error(label+"无效，请改用本地识别");
+  return n;
+ };
+ const rows=items.map((v,i)=>{
+  if(!v||typeof v.name!=="string")throw Error("AI返回的商品名称不正确");
+  const name=v.name.trim().slice(0,110),qty=Number(v.qty),unit=String(v.unit||"").trim();
+  if(!name||!Number.isFinite(qty)||qty<=0||qty>1e6||!allowedUnits.has(unit))throw Error("AI第"+(i+1)+"条数量或名称无效");
+  const kind=allowedKinds.has(v.kind)?v.kind:"metal";
+  const sourceRaw=String(v.source||"").trim().replace("咸鱼","闲鱼");
+  const source=allowedSources.has(sourceRaw)?sourceRaw:"";
+  const spoken=name+" "+qty+unit+(source?" "+source:"");
+  const row=preparePurchase(spoken);
+  row.text=original;
+  row.item=name;row.kind=kind;row.qty=qty;row.unit=unit;row.source=source;
+  const inferred=window.MetalAccessories?.detect(name);
+  if(kind==="metal"){
+   row.accessoryGroup=window.MetalAccessories?.GROUP_NAMES?.includes(v.accessoryGroup)?v.accessoryGroup:(inferred?.group||"");
+   row.accessoryType=String(v.accessoryType||inferred?.type||"").trim().slice(0,40);
+  }else if(kind==="bead"){
+   row.category=String(v.category||row.category||name).trim().slice(0,70);
+   row.purchaseType=["loose","strand","semi"].includes(v.purchaseType)?v.purchaseType:"loose";
+  }
+  if(typeof v.spec==="string"&&v.spec.trim()){row.size=v.spec.trim().slice(0,100);row.length="";}
+  row.unitPrice=amount(v.unitPrice,"识别单价");
+  const total=amount(v.totalPrice,"识别总价");
+  row.priceMode=total!==null?"total":row.unitPrice!==null?"unit":"inferred";
+  row.price=total!==null?total:row.unitPrice!==null?Math.round(row.unitPrice*qty*1e8)/1e8:null;
+  row.suggested=amount(v.suggestedPrice,"建议售价");
+  row.actual=amount(v.actualValue,"实际价值");
+  return row;
+ });
+ aiPreviewOverride=rows;
+ preview();
+}
+window.DailyIntake={parse,preparePurchase,splitPurchases,extractLabeledAmounts,previewAI};
 })();
