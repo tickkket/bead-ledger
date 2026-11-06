@@ -823,6 +823,7 @@ function handleAction(action,btn){const id=btn.dataset.id;
  case 'legacy-save-sale':window.LegacyClearance?.saveSale()?.catch(err=>toast(err.message||String(err)));break;
  case 'legacy-use-asking':window.LegacyClearance?.fillAsking();break;
  case 'legacy-reverse-sale':window.LegacyClearance?.reverseSale(id);break;
+ case 'legacy-delete':window.LegacyClearance?.deleteLot(id);break;
  case 'edit-material':byId(state.materials,id)?.legacyStock?window.LegacyClearance?.openLot(id):materialForm(id);break;case 'new-blind':blindForm();break;case 'recover-blind-draft':{ui.tab='materials';blindForm();break}case 'new-batch':batchForm();break;
  case 'new-product-hand':productForm(null,'hand');break;case 'new-product-out':productForm(null,'out');break;case 'edit-product':productForm(id);break;
  case 'new-sale':saleForm();break;case 'sale-product':saleForm(null,id);break;case 'edit-sale':saleForm(id);break;
