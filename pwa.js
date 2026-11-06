@@ -1,7 +1,7 @@
 /* Offline ledger PWA. App data stays in IndexedDB; updating the app shell does not erase records. */
 (()=>{
  "use strict";
- const BUILD=53;
+ const BUILD=54;
  let installPrompt=null,reloading=false,checking=false,registration=null,noticed=false;
  const isInstalled=()=>matchMedia("(display-mode:standalone)").matches||navigator.standalone===true;
  const isEditing=()=>!!document.querySelector("#editor,#bead-edit-shade,#bead-photo-overlay,#local-shade.open");
@@ -97,13 +97,10 @@
   else alert("请在 Chrome 浏览器菜单中选择「安装应用」或「添加到主屏幕」。");
  });
  if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost")){
+  // Never navigate without user action. Auto-reload can interrupt Android selectors and editing.
   navigator.serviceWorker.addEventListener("controllerchange",()=>{
    if(reloading)return;
-   if(isEditing()){
-    banner("新版本已安装，请先保存当前编辑，再点「立即更新」。",registration);
-    return;
-   }
-   openFreshPage();
+   banner("新版本已准备好。保存正在填写的内容后，再点击「立即更新」。",registration);
   });
   addEventListener("load",async()=>{
    try{
@@ -115,7 +112,7 @@
       if(installing.state==="installed")notify(reg);
      });
     });
-    if(!notify(reg))await check(false);
+    notify(reg); // No background update check, navigation or reload on startup.
    }catch(err){console.warn("无法启用离线更新",err);}
   });
  }

@@ -11,11 +11,8 @@ function resetAutofilledUrl(){
  if(isGatewayUrl(query)){query="";visual=false;expanded=false;draw();}
 }
 function scheduleAutofillGuard(){
+ // Only run synchronously on mount; delayed edits can fight native select UI on Android.
  resetAutofilledUrl();
- // Android autofill can run after DOM mount and even after a focus event.
- setTimeout(resetAutofilledUrl,150);
- setTimeout(resetAutofilledUrl,700);
- setTimeout(resetAutofilledUrl,1700);
 }
 const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function entries(){
@@ -85,7 +82,7 @@ function mount(){
  const slot=document.getElementById("ledger-global-search-slot");if(!slot)return;
  slot.innerHTML='<div class="ledger-search-box" role="search"><div class="ledger-search-line">'+
  '<span class="ledger-search-icon" aria-hidden="true">⌕</span>'+
- '<input id="ledger-query" name="ledger_local_inventory_keyword" type="search" enterkeyhint="search" placeholder="搜索物料或成品…" aria-label="搜索所有物料和成品" value="'+escapeHtml(query)+'" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" readonly>'+
+ '<input id="ledger-query" name="ledger_local_inventory_keyword" type="search" enterkeyhint="search" placeholder="搜索物料或成品…" aria-label="搜索所有物料和成品" value="'+escapeHtml(query)+'" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true">'+
  '<button type="button" data-ledger-search="clear" class="ledger-search-tool ledger-search-clear" aria-label="清除搜索" title="清除搜索" style="display:'+(query.trim()||visual?'inline-flex':'none')+'">×</button>'+
  '<button type="button" data-ledger-search="image" class="ledger-search-tool" aria-label="从相册选图查询" title="从相册选图查询">▧</button>'+
  '<button type="button" data-ledger-search="camera" class="ledger-search-tool" aria-label="拍照查询" title="拍照查询">📷</button>'+
@@ -126,14 +123,11 @@ document.addEventListener("input",event=>{
 });
 document.addEventListener("focusin",event=>{
  if(event.target.id==="ledger-query"){
-  event.target.readOnly=false;
   resetAutofilledUrl();
   if(query.trim()||visual){expanded=true;draw();}
  }
 });
-document.addEventListener("pointerdown",event=>{
- if(event.target.id==="ledger-query")event.target.readOnly=false;
-});
+
 document.addEventListener("click",event=>{
  const type=event.target.closest('[data-ledger-search]')?.dataset.ledgerSearch;
  if(type==="clear"){query="";visual=false;visualResult=[];visualError="";expanded=false;mount();document.getElementById("ledger-query")?.focus();return}
