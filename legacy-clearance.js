@@ -20,7 +20,7 @@ const field=(name,title,value="",type="text",hint="")=>
 const select=(name,title,values,selected="",hint="")=>
  '<div class="field"><label>'+e(title)+'</label><select class="select" name="'+e(name)+'">'+opts(values,selected)+'</select>'+(hint?'<div class="hint">'+e(hint)+'</div>':'')+'</div>';
 const optionalNumber=(root,name,label)=>{const raw=val(root,name);if(raw==="")return null;const number=Number(raw);required(Number.isFinite(number)&&number>=0&&number<1e9,label+"必须是大于等于0的数字");return number};
-const storageLots=()=>state.materials.filter(m=>m.legacyStock===true);
+const storageLots=()=>state.materials.filter(m=>m.legacyStock===true).sort((a,b)=>Number(b.legacyGroup==="metal"&&b.legacyColorClass==="保色差")-Number(a.legacyGroup==="metal"&&a.legacyColorClass==="保色差")||String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
 const sales=()=>Array.isArray(state.legacySales)?state.legacySales:[];
 const lotTitle=m=>(GROUP_LABEL[m.legacyGroup]||"历史物料")+(m.legacyGrade?" · "+m.legacyGrade:"")+(m.legacyColorClass?" · "+m.legacyColorClass:"");
 const askPrice=m=>[
@@ -38,7 +38,7 @@ function renderSection(){
   const grade=m.legacyGroup==="glass"?m.legacyGrade:m.legacyGroup==="metal"?m.legacyColorClass:"历史批次";
   const history=(m.legacyTests||[]).length;
   return '<div class="item"><div class="item-body"><div class="item-title">'+e(m.name)+' '+badge(GROUP_LABEL[m.legacyGroup]||"旧货")+(grade?badge(grade):"")+'</div>'+
-   '<div class="meta">剩余 '+fmt(m.qty)+' '+unit+' · '+(askPrice(m)?'参考售价 '+e(askPrice(m))+' · ':'')+'历史成本不详</div>'+
+   '<div class="meta">'+(m.legacyGroup==='metal'&&m.legacyColorClass==='保色差'?'<b style="color:#ae4949">优先清仓</b> · ':'')+'剩余 '+fmt(m.qty)+' '+unit+' · '+(askPrice(m)?'参考售价 '+e(askPrice(m))+' · ':'')+'历史成本不详</div>'+
    '<div class="meta">经营系列：平价琉璃 / 历史库存'+(history?' · 保色测试 '+history+' 次':'')+(m.notes?' · '+e(m.notes):'')+'</div></div>'+
    '<div class="side"><div class="item-buttons"><button class="btn small" data-action="legacy-edit" data-id="'+e(m.id)+'">编辑</button>'+
    '<button class="btn small primary" data-action="legacy-sell" data-id="'+e(m.id)+'"'+(n(m.qty)<=0?' disabled':'')+'>清仓出售</button></div></div></div>';
