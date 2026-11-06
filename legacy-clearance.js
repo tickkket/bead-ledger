@@ -41,7 +41,7 @@ function renderSection(){
    '<div class="meta">'+(m.legacyGroup==='metal'&&m.legacyColorClass==='保色差'?'<b style="color:#ae4949">优先清仓</b> · ':'')+'剩余 '+fmt(m.qty)+' '+unit+' · '+(askPrice(m)?'参考售价 '+e(askPrice(m))+' · ':'')+'历史成本不详</div>'+
    '<div class="meta">经营系列：平价琉璃 / 历史库存'+(history?' · 保色测试 '+history+' 次':'')+(m.notes?' · '+e(m.notes):'')+'</div></div>'+
    '<div class="side"><div class="item-buttons"><button class="btn small" data-action="legacy-edit" data-id="'+e(m.id)+'">编辑</button>'+
-   '<button class="btn small primary" data-action="legacy-sell" data-id="'+e(m.id)+'"'+(n(m.qty)<=0?' disabled':'')+'>清仓出售</button></div></div></div>';
+   '<button class="btn small primary" data-action="legacy-sell" data-id="'+e(m.id)+'"'+(n(m.qty)<=0?' disabled':'')+'>清仓出售</button><button class="btn small danger" data-action="legacy-delete" data-id="'+e(m.id)+'">删除</button></div></div></div>';
  }).join("");
  return '<section class="panel" style="margin-bottom:14px;padding:13px">'+
   '<div class="flex" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><h3 style="margin:0 0 4px">历史库存 · 批量清仓</h3>'+
@@ -253,6 +253,14 @@ function reverseSale(id){
   state.legacySales=state.legacySales.filter(x=>x.id!==id);
  },"清仓销售已撤销，库存已恢复");
 }
+function deleteLot(id){
+ const m=byId(state.materials,id);
+ if(!m?.legacyStock)return toast("历史库存批次不存在");
+ if(sales().some(s=>s.materialId===id))return toast("已有清仓流水，不能删除历史库存批次；可盘点为0");
+ if(state.products.some(p=>p.type==="hand"&&(p.components||[]).some(x=>x.id===id)))return toast("该批次已被手作配方引用，不能删除");
+ if(!confirm("确定删除历史库存批次「"+m.name+"」吗？此操作会一并删除它的保色测试记录。"))return;
+ commit(()=>{state.materials=state.materials.filter(x=>x.id!==id)},"历史库存批次已删除");
+}
 function initFormUI(){
  const root=$("#editor");if(!root)return;
  const group=val(root,"legacyGroup"),grade=$("#legacy-grade-wrap"),colors=$("#legacy-color-wrap"),test=$("#legacy-color-test");
@@ -270,6 +278,6 @@ document.addEventListener("change",ev=>{
 document.addEventListener("input",ev=>{
  if(ev.target.matches('#editor [name="legacySaleQty"]'))updateSaleHint();
 });
-window.LegacyClearance={renderSection,renderSalesSection,openLot,saveLot,saleForm,saveSale,reverseSale,fillAsking,modesFor};
+window.LegacyClearance={renderSection,renderSalesSection,openLot,saveLot,saleForm,saveSale,reverseSale,deleteLot,fillAsking,modesFor};
 if(ui.tab==="materials"||ui.tab==="sales")render();
 })();
