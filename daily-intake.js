@@ -384,7 +384,8 @@ function previewAI(items){
   if(!v||typeof v.name!=="string")throw Error("AI返回的商品名称不正确");
   const name=v.name.trim().slice(0,110),qty=Number(v.qty),unit=String(v.unit||"").trim();
   if(!name||!Number.isFinite(qty)||qty<=0||qty>1e6||!allowedUnits.has(unit))throw Error("AI第"+(i+1)+"条数量或名称无效");
-  const kind=allowedKinds.has(v.kind)?v.kind:"metal";
+  if(!allowedKinds.has(v.kind))throw Error("AI第"+(i+1)+"条类别无法确认，请改用本地识别");
+  const kind=v.kind;
   const sourceRaw=String(v.source||"").trim().replace("咸鱼","闲鱼");
   const source=allowedSources.has(sourceRaw)?sourceRaw:"";
   const spoken=name+" "+qty+unit+(source?" "+source:"");
