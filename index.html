@@ -159,9 +159,9 @@ async function openStore(){
  storageMode='indexeddb';const saved=await new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readonly');const r=t.objectStore(STORE).get(KEY);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});if(saved)state=normalize(saved);
  }catch(e){console.warn('IndexedDB unavailable',e);db=null;try{const x=localStorage.getItem(DB_NAME);if(x)state=normalize(JSON.parse(x));localStorage.setItem(DB_NAME+'-probe','1');localStorage.removeItem(DB_NAME+'-probe');storageMode='localStorage'}catch(_){storageMode='unavailable'}}
 }
-function normalize(x){const base=stateInit();if(!x||typeof x!=='object')return base;for(const k of ['materials','batches','products','markets','sales','adjustments','marketHistory','marketSamples'])if(Array.isArray(x[k]))base[k]=x[k];base.settings={...base.settings,...(x.settings||{})};base.categoryUsage=x.categoryUsage&&typeof x.categoryUsage==='object'?x.categoryUsage:{};for(const m of base.materials){if(m.kind==='bead')m.beadGroup=ensureStoneClass(m.beadGroup,m.subtype||m.name)}return base}
+function normalize(x){const base=stateInit();if(!x||typeof x!=='object')return base;for(const k of ['materials','batches','products','markets','sales','adjustments','marketHistory','marketSamples'])if(Array.isArray(x[k]))base[k]=x[k];base.settings={...base.settings,...(x.settings||{})};base.categoryUsage=x.categoryUsage&&typeof x.categoryUsage==='object'?x.categoryUsage:{};for(const m of base.materials){if(m.kind==='bead')m.beadGroup=ensureStoneClass(m.beadGroup,m.subtype||m.name);m.usageStatus=usageStatusOf(m)}for(const p of base.products)p.usageStatus=usageStatusOf(p);return base}
 async function persist(){if(storageMode==='indexeddb')return new Promise((resolve,reject)=>{try{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(state,KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('数据库保存失败'));tx.onabort=()=>reject(tx.error||new Error('数据库写入中断'))}catch(e){reject(e)}});if(storageMode==='localStorage'){localStorage.setItem(DB_NAME,JSON.stringify(state));return}throw Error('此浏览器无法持久化保存，请换用 Chrome/Edge 浏览器打开')}
-async function commit(action,message='已保存'){const old=structuredClone(state);try{action();await persist();closeModal();render();toast(message)}catch(err){state=old;render();toast('操作未保存：'+(err.message||err));console.error(err)}}
+async function commit(action,message='已保存'){const old=structuredClone(state);try{action();for(const item of [...state.materials,...state.products])item.usageStatus=usageStatusOf(item);await persist();closeModal();render();toast(message)}catch(err){state=old;render();toast('操作未保存：'+(err.message||err));console.error(err)}}
 // Idempotent, transactional update of historical purchasing-source text only.
 // Does not change ordinary notes, goods, photos, costs, quantities or sales.
 async function migrateXianyuPurchaseChannels(){
@@ -191,11 +191,15 @@ const BEAD_GROUPS={
  '彩色单晶矿石类':['萤石','紫萤石','紫方糖','碧玺','石榴石','托帕石','海蓝宝','摩根石','紫锂辉'],
  '翡翠&软玉类':['翡翠','白水','蓝水','和田玉'],
  '其他集合玉石类':['玛瑙','玉髓','绿松石','青金石','阿富汗玉','东陵玉'],
+ '贝类':['贝类','贝壳','贝母','戒面/贴面','通孔','碎石'],
  '有机/香木类':['蜜蜡','琥珀','珍珠','淡水珍珠','海水珍珠','贝珠','仿珍珠','玻璃珍珠','米珠','香木葫芦','香木珠','檀木','小叶紫檀','绿檀','黑檀','沉香木','沉香','黄花梨','崖柏','桃木','木珠','菩提','星月菩提','金刚菩提','凤眼菩提','菩提根','千眼菩提','莲花菩提','百香籽','橄榄核','椰蒂','椰壳']
 };
 const STONE_CLASS_NAMES=[...Object.keys(BEAD_GROUPS),'待确认品类'];
 const groupOpts=STONE_CLASS_NAMES.map(x=>[x,x]);
 const SOURCE_CHOICES=['小红书','淘宝','拼多多','1688','闲鱼','抖音','微信','线下批发','其他'];
+const USAGE_STATUSES=['未用','已用','已卖','自戴'];
+const usageStatusOf=x=>USAGE_STATUSES.includes(x?.usageStatus)?x.usageStatus:'未用';
+const usageStatusOptions=selected=>USAGE_STATUSES.map(s=>[s,s]);
 const GRADES=[['精品','精品 / 品相佳'],['优选','优选 / 状态好'],['普通','普通 / 一般'],['瑕疵','瑕疵 / 明显瑕疵']];
 const GRADE_FACTOR={精品:1.35,优选:1,普通:.7,瑕疵:.35};
 const classRegex={
@@ -204,6 +208,7 @@ const classRegex={
  '彩色单晶矿石类':/萤石|紫方糖|碧玺|石榴石|托帕石|海蓝宝|摩根石|紫锂辉/,
  '翡翠&软玉类':/翡翠|和田玉|蓝水翡翠|白水翡翠/,
  '其他集合玉石类':/玛瑙|玉髓|绿松石|青金石|阿富汗玉|东陵玉/,
+ '贝类':/贝类|贝壳|贝母|贝片|贝雕|砗磲/,
  '有机/香木类':/蜜蜡|琥珀|珍珠|贝珠|香木|檀木|檀香|沉香|花梨|崖柏|桃木|木珠|菩提|百香籽|橄榄核|椰蒂|椰壳|米珠/
 };
 const CRYSTAL_NICKNAMES={白水:'白水晶',紫水:'紫水晶',黄水:'黄水晶',粉水:'粉水晶',茶水:'茶晶',绿水:'绿水晶',红水:'红水晶',蓝水:'蓝水晶',黑水:'黑水晶'};
@@ -219,6 +224,7 @@ function crystalNickname(input){
 function inferStoneClass(value){
  const x=String(value||'').trim();if(!x||x==='福利珠'||x==='未分类福利珠'||x==='盲盒福利珠')return '待确认品类';
  if(/翡翠|和田玉/.test(x))return '翡翠&软玉类';
+ if(/贝类|贝壳|贝母|贝片|贝雕|砗磲/.test(x))return '贝类';
  if(Object.hasOwn(CRYSTAL_NICKNAMES,x)||crystalNickname(x))return '石英水晶类';
  for(const [className,words] of Object.entries(BEAD_GROUPS)){
    if(words.some(word=>word===x))return className;
@@ -244,7 +250,7 @@ function beadCategoryField(name,label,value='',group='待确认品类'){
 // 按业务需要区分珍珠、天然石、木珠形状；原有常用顺序优先，实际库存使用次数高的进一步前置。
 const BEAD_SHAPES={
  pearl:['近圆','正圆','鸡蛋圆','米珠','水滴珠','算盘珠','木头珠','花瓣珠','异形','小巴','大巴','碎银子','方块珠','星星珠','心形珠','牙签珠','纽扣珠','五瓣花珠','十字架珠','螺纹珠','扁片珍珠','元宝珠'],
- stone:['圆珠','桶珠','鼓珠','老型珠','莲花珠','算盘珠','枣珠','橄榄珠','弯管珠','唐八棱','蹦迪珠','方糖珠','切面圆珠','瓜棱珠','灯笼珠','菠萝珠','随形珠','水滴珠','心形珠','圆形跑环','八角跑环','平安扣','切面珠','钻切珠','糖豆'],
+ stone:['圆珠','桶珠','鼓珠','老型珠','莲花珠','算盘珠','枣珠','橄榄珠','弯管珠','唐八棱','蹦迪珠','方糖珠','切面圆珠','瓜棱珠','灯笼珠','菠萝珠','随形珠','水滴珠','心形珠','圆形跑环','八角跑环','平安扣','切面珠','钻切珠','糖豆','碎石'],
  wood:['圆珠','方珠','钻石珠','药片珠（隔片）','六棱珠','长桶珠','老型珠','鼓珠','桶珠','算盘珠','随型']
 };
 function shapeFamily(group,subtype='',name=''){
@@ -397,6 +403,7 @@ const stockSummary=m=>{
  const values=m.kind==='bead'?
  [['类型',BEAD_PURCHASE_LABEL[beadPurchaseTypeOf(m)]||'未标注'],['分类',ensureStoneClass(m.beadGroup,m.subtype||m.name)],['形状',m.shape||'未填'],['规格',m.spec||'未填'],['库存',fmt(m.qty)+' '+(m.unit||'颗')],['成本',money(m.unitCost)+'/'+(m.unit||'颗')],['渠道',m.source||'未填']]:
  [['类别',kindName[m.kind]||m.kind],...(m.kind==='metal'?[['分类',m.accessoryGroup||window.MetalAccessories?.detect(m.name)?.group||'待分类'],['配件类型',m.accessoryType||window.MetalAccessories?.detect(m.name)?.type||'未填写']]:[]),['库存',fmt(m.qty)+' '+(m.unit||'个')],['成本',money(m.unitCost)],['渠道',m.source||'未填']];
+ values.unshift(['使用状态',usageStatusOf(m)]);
  const chips=values.map(([k,v])=>'<span class="'+(['类型','分类','渠道'].includes(k)||String(v).length>18?'stock-long':'')+'"><b>'+esc(k)+'：</b>'+esc(v)+'</span>').join('');
  let prices='';
  if(m.kind==='bead'){
@@ -451,14 +458,14 @@ function setMaterialFormBalance(){
  const editor=$('#editor');if(!editor)return;
  editor.classList.add('balanced-material-form');
  // Long selects, category/shape searches and text fields need the full width to be usable on a phone.
- const wideNames=new Set(['name','purchaseType','beadGroup','subtype','shape','sourceChannel','sourceDetail','flaw','notes']);
+ const wideNames=new Set(['usageStatus','name','purchaseType','beadGroup','subtype','shape','sourceChannel','sourceDetail','flaw','notes']);
  for(const field of editor.querySelectorAll('.form-grid > .field')){
   const input=field.querySelector('input[name],select[name],textarea[name]');
   if(input&&wideNames.has(input.name))field.classList.add('balanced-wide');
  }
 }
 function materialForm(id=null,forced='bead'){
- const m=id?byId(state.materials,id):null;const kind=m?.kind||forced;ui.images={main:m?.image||''};const opt=[['bead','珠子 / 天然石 / 珍珠 / 香木'],['metal','金属配件 / 装饰连接配件'],['supply','耗材 / 包装'],['tool','工具']];let body=`<input type="hidden" name="id" value="${attr(id||'')}"><div class="form-grid">${sel('kind','类别',kind,opt)}${field('name','名称',m?.name||'',{required:true,placeholder:'例：白水晶散珠 / 龙虾扣'})}`;
+ const m=id?byId(state.materials,id):null;const kind=m?.kind||forced;ui.images={main:m?.image||''};const opt=[['bead','珠子 / 天然石 / 珍珠 / 香木'],['metal','金属配件 / 装饰连接配件'],['supply','耗材 / 包装'],['tool','工具']];let body=`<input type="hidden" name="id" value="${attr(id||'')}"><div class="form-grid">${sel('kind','类别',kind,opt)}${sel('usageStatus','使用状态（必选）',usageStatusOf(m),usageStatusOptions())}${field('name','名称',m?.name||'',{required:true,placeholder:'例：白水晶散珠 / 龙虾扣'})}`;
  if(kind==='bead')body+=`${sel('purchaseType','物料类型（可修改）',m?beadPurchaseTypeOf(m):'loose',[['','请选择具体物料类型'],...BEAD_PURCHASE_TYPES])}${sel('beadGroup','散珠分类',ensureStoneClass(m?.beadGroup,m?.subtype||m?.name),groupOpts)}${beadCategoryField('subtype','珠子品类',m?.subtype||'',ensureStoneClass(m?.beadGroup,m?.subtype||m?.name))}${beadShapeField('shape','形状 / 珠型（可搜索）',m?.shape||'',m?.beadGroup,m?.subtype,m?.name)}${field('spec','卡数：珠子尺寸 / 规格',m?.spec||'',{placeholder:'例：8mm / 10卡'})}${num('weight','单颗克重（g；可不填）',m?.weight||'')}${sel('grade','品相档位',m?.grade||gradeFromText(m?.flaw),GRADES)}${field('flaw','具体瑕疵备注',m?.flaw||'')}${field('wholesaleRange','批发参考克价区间（元/g）',m?.wholesaleRange||'',{placeholder:'例：3.5~5元/g'})}${field('stallRange','摆摊建议售价区间（元/颗）',m?.stallRange||'',{placeholder:'例：7–9元'})}${field('looseMarketPrice','散珠行情价（元/颗）',m?.looseMarketPrice||'',{placeholder:'例如 8–12'})}${field('onlineRange','线上零售参考区间（元/颗）',m?.onlineRange||'',{placeholder:'例：12~16元'})}${field('costHint','原表单颗成本参考',m?.costHint||'',{placeholder:'仅核对，不改变实际成本'})}<div class="field wide info" data-market-estimate></div>${num('suggestedPrice','自主定价（元，可留空）',m?.suggestedPrice||'')}${num('actualValue','实际价值参考（元/当前库存单位，可留空）',m?.actualValue??'')}`;
  if(kind==='metal'){
   const inferred=window.MetalAccessories?.detect(m?.name||'');
@@ -578,7 +585,7 @@ function refreshCraftSize(){
  if(label)label.textContent=craftSizeLabel(type);
  if(input)input.placeholder=type==="bracelet"?"例如 15.5":type==="necklace"?"例如 42":type==="ring"?"例如 12号":"可填写";
 }
-function productForm(id=null,forced='hand'){const p=id?byId(state.products,id):null;const type=p?.type||forced;const sold=p?n(p.producedQty)-n(p.stock):0;const locked=type==='hand'&&sold>0;ui.images={main:p?.image||''};ui.bomRows=p?.components?structuredClone(p.components):[];let body=`<input type="hidden" name="id" value="${attr(id||'')}"><input type="hidden" name="type" value="${type}"><div class="${type==='out'?'warning':'info'}" style="margin-bottom:12px">${type==='hand'?'自制手作：录入每件用料与制作数量，入库时自动扣除散珠／配件／耗材库存。':'外购成品，非手作。此身份不可更改，不得作为手工制作宣传。'}</div><div class="form-grid">${field('name','成品名称',p?.name||'',{required:true,placeholder:'例：白水晶绕线手串'})}${num('price','售价（元）',p?.price??'',{required:true})}${num('producedQty','本批入库总件数',p?.producedQty??1,{min:1,step:1,required:true})}`;
+function productForm(id=null,forced='hand'){const p=id?byId(state.products,id):null;const type=p?.type||forced;const sold=p?n(p.producedQty)-n(p.stock):0;const locked=type==='hand'&&sold>0;ui.images={main:p?.image||''};ui.bomRows=p?.components?structuredClone(p.components):[];let body=`<input type="hidden" name="id" value="${attr(id||'')}"><input type="hidden" name="type" value="${type}"><div class="${type==='out'?'warning':'info'}" style="margin-bottom:12px">${type==='hand'?'自制手作：录入每件用料与制作数量，入库时自动扣除散珠／配件／耗材库存。':'外购成品，非手作。此身份不可更改，不得作为手工制作宣传。'}</div><div class="form-grid">${sel('usageStatus','使用状态（必选）',usageStatusOf(p),usageStatusOptions())}${field('name','成品名称',p?.name||'',{required:true,placeholder:'例：白水晶绕线手串'})}${num('price','售价（元）',p?.price??'',{required:true})}${num('producedQty','本批入库总件数',p?.producedQty??1,{min:1,step:1,required:true})}`;
  if(type==='hand'){
  body+=`${sel('craftType','作品类型（必选）',p?.craftType||'',[['','请选择手作类型'],...CRAFT_TYPES])}${field('craftSize','手围 / 链长 / 戒号',p?.craftSize||'',{placeholder:'按作品类型填写'})}${imageField('main','手作成品照片（可从相册选择或拍照）')}${sel('laborMode','手工费计算',p?.laborMode||'fixed',[['fixed','每件固定手工费'],['hour','每件工时 × 时薪']])}${num('laborFixed','每件固定手工费（元）',p?.laborFixed??0)}${num('hours','每件制作小时数',p?.hours??0.5)}${field('notes','备注 / 做工说明',p?.notes||'',{type:'textarea',wide:true})}</div><hr class="hr"><div class="line-entry"><b>口头说明每件手作用了什么</b><div class="hint">如：用了6颗珍珠、2颗黄水晶、1个龙虾扣。只识别品类和用量，具体采购批次由你确认。</div><textarea class="textarea" name="materialNarrative" placeholder="用了6颗珍珠、2颗黄水晶、1个龙虾扣" ${locked?'disabled':''}>${esc(p?.materialNarrative||'')}</textarea><div class="actions" style="margin-top:8px"><button type="button" class="btn light" data-action="hand-dictate" ${locked?'disabled':''}>🎤 语音输入</button><button type="button" class="btn primary" data-action="hand-parse" ${locked?'disabled':''}>识别用料，推荐库存物料</button></div><div class="hint" id="hand-parse-status">先描述用料，再手动选择具体物料批次；未选中时不能正式保存。</div></div><div class="flex" style="justify-content:space-between"><b>每件成品使用的物料</b><button class="btn small" type="button" data-action="add-bom-row" ${locked?'disabled':''}>＋ 选择物料</button></div><div id="bom-rows">${ui.bomRows.map((x,i)=>bomRow(x,i,locked)).join('')}</div>${state.materials.some(m=>m.kind==='tool')?`<div class="line-entry"><div class="line-title">本批使用哪些工具参与折旧？（自动模式才生效）</div><div class="flex">${state.materials.filter(m=>m.kind==='tool').map(t=>`<label class="check"><input type="checkbox" name="toolId" value="${t.id}" ${(!p?.toolIds||p.toolIds.includes(t.id))?'checked':''} ${locked?'disabled':''}><span>${esc(t.name)} · 剩余摊销 ${fmt(Math.max(0,n(t.amortPieces)-n(t.amortUsed)))} 件</span></label>`).join('')}</div><div class="hint muted">默认全选。某件作品没有用到的工具请取消勾选，避免把不相关折旧算进去。</div></div>`:''}<div class="info">成本 = 每件物料用量成本 + 手工费 + 摊位费预算 + 工具折旧。没有配方也可以建立空配方的手工作品（但不推荐）。</div><div id="cost-preview" class="panel" style="margin-top:12px;background:#f8faf7"></div>`;
  if(locked)body+=`<div class="warning">此批已经售出 ${sold} 件，为保护历史成本与用料记录，配方、制作数量、计价方式已锁定。如需补货或换材料，请新建一个同名批次。</div>`;
@@ -685,7 +692,7 @@ function blindPaste(){
 }
 
 async function saveMaterial(){const root=$('#editor');const id=v(root,'id'),old=byId(state.materials,id),kind=v(root,'kind'),name=v(root,'name');required(name,'请填写物料名称');required(['bead','metal','supply','tool'].includes(kind),'物料类别错误');const qty=nv(root,'qty');required(qty>=0,'数量不能小于0');if(old&&old.kind!==kind)required(false,'已有物料不支持改变类别，请另建条目');
- const material={...old,id:id||uid(),kind,name,source:purchaseSource(root),purchaseDate:v(root,'purchaseDate')||today(),notes:v(root,'notes'),image:ui.images.main||'',qty,unit:kind==='tool'?v(root,'toolUnit'):v(root,'unit'),createdAt:old?.createdAt||new Date().toISOString()};
+ const usageStatus=v(root,'usageStatus');required(USAGE_STATUSES.includes(usageStatus),'请选择使用状态');const material={...old,id:id||uid(),kind,name,usageStatus,source:purchaseSource(root),purchaseDate:v(root,'purchaseDate')||today(),notes:v(root,'notes'),image:ui.images.main||'',qty,unit:kind==='tool'?v(root,'toolUnit'):v(root,'unit'),createdAt:old?.createdAt||new Date().toISOString()};
  if(kind==='bead'){required(BEAD_PURCHASE_LABEL[v(root,'purchaseType')],'请选择散珠、素串或半成品，不允许留空');required(STONE_CLASS_NAMES.includes(v(root,'beadGroup')),'请选择六大分类或待确认品类');}if(kind==='bead')Object.assign(material,{purchaseType:v(root,'purchaseType'),beadGroup:ensureStoneClass(v(root,'beadGroup'),v(root,'subtype')),subtype:v(root,'subtype'),shape:v(root,'shape'),spec:v(root,'spec'),weight:nv(root,'weight'),grade:v(root,'grade'),flaw:v(root,'flaw'),wholesaleRange:v(root,'wholesaleRange'),stallRange:v(root,'stallRange'),looseMarketPrice:v(root,'looseMarketPrice'),onlineRange:v(root,'onlineRange'),costHint:v(root,'costHint'),marketGram:old?.marketGram||0,suggestedPrice:nv(root,'suggestedPrice'),actualValue:inputVal(root,'actualValue').trim()===''?null:nv(root,'actualValue'),actualValueUnit:inputVal(root,'actualValue').trim()===''?'':material.unit});
  if(kind==='bead'&&material.actualValue!==null)required(Number.isFinite(material.actualValue)&&material.actualValue>=0,'实际价值参考必须为非负数');
  if(kind==='metal'){
@@ -705,7 +712,7 @@ async function saveBlind(){const root=$('#editor');const title=v(root,'title'),t
  if(state.batches.some(b=>b.id===batchId))await clearBlindDraft();
 }
 async function saveBatch(){const txt=v($('#editor'),'bulk');required(txt,'请粘贴至少一行');const rows=txt.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);required(rows.length<=300,'一次最多批量录入 300 行');const m=[];for(let i=0;i<rows.length;i++){let parts=rows[i].split('\t').map(x=>x.trim());required(parts.length>=4,`第 ${i+1} 行列数不足，请用制表符分隔`);const [category,name,unitPrice,quantity,unit='个',sourceRaw='',...notes]=parts;const source=purchaseSourceText(sourceRaw);const kind={'配件':'metal','金属配件':'metal','耗材':'supply','散珠':'bead','天然石':'bead', '珍珠':'bead','珠子':'bead',...Object.fromEntries(STONE_CLASS_NAMES.map(g=>[g,'bead']))}[category];required(kind,`第 ${i+1} 行类别必须为散珠／配件／耗材`);required(name,`第 ${i+1} 行缺少名称`);required(unitPrice!==''&&Number.isFinite(Number(unitPrice))&&Number(unitPrice)>=0,`第 ${i+1} 行单价不正确`);required(quantity!==''&&Number.isFinite(Number(quantity))&&Number(quantity)>0,`第 ${i+1} 行数量不正确`);const qq=Number(quantity),price=Number(unitPrice);m.push({id:uid(),kind,name,subtype:kind==='bead'?name:'',beadGroup:kind==='bead'?inferStoneClass(name):'',shape:kind==='bead'?detectBeadShape(name+' '+notes.join(' '),inferStoneClass(name),name,name):'',purchaseType:kind==='bead'?'loose':undefined,spec:'',weight:0,flaw:'',marketGram:0,suggestedPrice:0,qty:qq,initialQty:qq,unit:unit||'个',unitCost:price,source,notes:notes.join(' '),image:'',purchaseDate:today(),createdAt:new Date().toISOString(),isWelfare:false})}await commit(()=>state.materials.push(...m),`成功入库 ${m.length} 条物料`)}
-async function saveProduct(){const root=$('#editor'),id=v(root,'id'),type=v(root,'type'),old=byId(state.products,id),name=v(root,'name'),price=nv(root,'price'),qty=nv(root,'producedQty');required(name,'请填写成品名称');required(inputVal(root,'price')!==''&&price>=0,'请输入正确售价');required(Number.isInteger(qty)&&qty>=1,'入库件数必须是正整数');const sold=old?n(old.producedQty)-n(old.stock):0;required(!old||old.type===type,'成品类型不能更改');const base={...old,id:id||uid(),type,name,price,notes:v(root,'notes'),image:ui.images.main||'',createdAt:old?.createdAt||new Date().toISOString()};
+async function saveProduct(){const root=$('#editor'),id=v(root,'id'),type=v(root,'type'),old=byId(state.products,id),name=v(root,'name'),price=nv(root,'price'),qty=nv(root,'producedQty');required(name,'请填写成品名称');required(inputVal(root,'price')!==''&&price>=0,'请输入正确售价');required(Number.isInteger(qty)&&qty>=1,'入库件数必须是正整数');const sold=old?n(old.producedQty)-n(old.stock):0;required(!old||old.type===type,'成品类型不能更改');const usageStatus=v(root,'usageStatus');required(USAGE_STATUSES.includes(usageStatus),'请选择使用状态');const base={...old,id:id||uid(),type,name,usageStatus,price,notes:v(root,'notes'),image:ui.images.main||'',createdAt:old?.createdAt||new Date().toISOString()};
  if(type==='out'){const buyPrice=nv(root,'buyPrice');required(inputVal(root,'buyPrice')!==''&&buyPrice>=0,'请输入正确进价');required(qty>=sold,'入库总数不能少于已经卖出的数量');Object.assign(base,{buyPrice,source:purchaseSource(root),sameOnline:v(root,'sameOnline')==='1',producedQty:qty,stock:qty-sold,cost:{unit:buyPrice,material:buyPrice,labor:0,stall:0,tool:0}});await commit(()=>{if(old)state.products[state.products.findIndex(x=>x.id===id)]=base;else state.products.push(base)},'外购成品已保存（非手作）');return}
  if(type==='hand'){
  const craftType=v(root,'craftType'),craftSize=v(root,'craftSize');
