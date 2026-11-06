@@ -191,7 +191,7 @@ const BEAD_GROUPS={
  '彩色单晶矿石类':['萤石','紫萤石','紫方糖','碧玺','石榴石','托帕石','海蓝宝','摩根石','紫锂辉'],
  '翡翠&软玉类':['翡翠','白水','蓝水','和田玉'],
  '其他集合玉石类':['玛瑙','玉髓','绿松石','青金石','阿富汗玉','东陵玉'],
- '贝类':['贝类','贝壳','贝母','戒面/贴面','通孔','碎石'],
+ '贝类':['戒面/贴面','通孔','碎石'],
  '有机/香木类':['蜜蜡','琥珀','珍珠','淡水珍珠','海水珍珠','贝珠','仿珍珠','玻璃珍珠','米珠','香木葫芦','香木珠','檀木','小叶紫檀','绿檀','黑檀','沉香木','沉香','黄花梨','崖柏','桃木','木珠','菩提','星月菩提','金刚菩提','凤眼菩提','菩提根','千眼菩提','莲花菩提','百香籽','橄榄核','椰蒂','椰壳']
 };
 const STONE_CLASS_NAMES=[...Object.keys(BEAD_GROUPS),'待确认品类'];
@@ -224,6 +224,7 @@ function crystalNickname(input){
 function inferStoneClass(value){
  const x=String(value||'').trim();if(!x||x==='福利珠'||x==='未分类福利珠'||x==='盲盒福利珠')return '待确认品类';
  if(/翡翠|和田玉/.test(x))return '翡翠&软玉类';
+ if(x==='碎石')return '待确认品类';
  if(/贝类|贝壳|贝母|贝片|贝雕|砗磲/.test(x))return '贝类';
  if(Object.hasOwn(CRYSTAL_NICKNAMES,x)||crystalNickname(x))return '石英水晶类';
  for(const [className,words] of Object.entries(BEAD_GROUPS)){
@@ -272,9 +273,10 @@ window.BeadShapeChoices=(group='',subtype='',name='',current='')=>
 window.BeadUsageStatuses=USAGE_STATUSES;
 window.BeadUsageStatusFromText=(raw)=>{
  const s=String(raw||'');
- if(/(?:自戴|自己戴|自留佩戴|自己佩戴)/.test(s))return '自戴';
- if(/(?:已卖|已售|卖掉|售出|已经卖了)/.test(s))return '已卖';
- if(/(?:已用|用掉|已使用|已经用过|已经用了)/.test(s))return '已用';
+ if(/(?:没用过|没有使用|未用|未使用|未动过|还没用|未卖)/.test(s))return '未用';
+ if(/(?:自戴|自己戴|自留佩戴|自己佩戴|留着自己戴)/.test(s))return '自戴';
+ if(/(?:已卖|已售|卖掉|卖出了|售出|已经卖了)/.test(s))return '已卖';
+ if(/(?:已用|用掉|已使用|已经用过|已经用了|用过了|用了)/.test(s))return '已用';
  return '未用';
 };
 function detectBeadShape(text,group='',subtype='',name=''){
