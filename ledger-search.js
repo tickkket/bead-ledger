@@ -1,11 +1,28 @@
 (function(){
 "use strict";
 let query="",visual=false,visualResult=[],loading=false,expanded=false,visualError="";
+const isGatewayUrl=value=>/^\s*(https?:\/\/|(?:bead-ledger-ai|ai-gateway)[-./])/i.test(String(value||""));
+function resetAutofilledUrl(){
+ const input=document.getElementById("ledger-query");
+ if(input&&isGatewayUrl(input.value)){
+  input.value="";
+  query="";visual=false;expanded=false;draw();
+ }
+ if(isGatewayUrl(query)){query="";visual=false;expanded=false;draw();}
+}
+function scheduleAutofillGuard(){
+ resetAutofilledUrl();
+ // Android autofill can run after DOM mount and even after a focus event.
+ setTimeout(resetAutofilledUrl,150);
+ setTimeout(resetAutofilledUrl,700);
+ setTimeout(resetAutofilledUrl,1700);
+}
 const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function entries(){
  return state.materials.map(item=>({kind:"material",item:item})).concat(state.products.map(item=>({kind:"product",item:item})));
 }
 function find(query){
+ if(isGatewayUrl(query))return [];
  const terms=query.toLowerCase().trim().split(/\s+/).filter(Boolean);if(!terms.length)return [];
  return entries().filter(x=>{
   const p=x.item;
@@ -64,19 +81,22 @@ async function searchImage(url){
  }
 }
 function mount(){
+ if(isGatewayUrl(query))query="";
  const slot=document.getElementById("ledger-global-search-slot");if(!slot)return;
  slot.innerHTML='<div class="ledger-search-box" role="search"><div class="ledger-search-line">'+
  '<span class="ledger-search-icon" aria-hidden="true">⌕</span>'+
- '<input id="ledger-query" type="search" enterkeyhint="search" placeholder="搜索物料或成品…" aria-label="搜索所有物料和成品" value="'+escapeHtml(query)+'" autocomplete="off">'+
+ '<input id="ledger-query" name="ledger_local_inventory_keyword" type="search" enterkeyhint="search" placeholder="搜索物料或成品…" aria-label="搜索所有物料和成品" value="'+escapeHtml(query)+'" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" readonly>'+
  '<button type="button" data-ledger-search="clear" class="ledger-search-tool ledger-search-clear" aria-label="清除搜索" title="清除搜索" style="display:'+(query.trim()||visual?'inline-flex':'none')+'">×</button>'+
  '<button type="button" data-ledger-search="image" class="ledger-search-tool" aria-label="从相册选图查询" title="从相册选图查询">▧</button>'+
  '<button type="button" data-ledger-search="camera" class="ledger-search-tool" aria-label="拍照查询" title="拍照查询">📷</button>'+
  '<input type="file" id="ledger-image-query" accept="image/*" style="display:none"></div>'+
  '<div id="ledger-results" class="ledger-search-results" aria-live="polite" hidden></div></div>';
  draw();
+ scheduleAutofillGuard();
 }
 function draw(){
  const node=document.getElementById("ledger-results");if(!node)return;
+ if(isGatewayUrl(query)){query="";expanded=false;const el=document.getElementById("ledger-query");if(el)el.value="";}
  const clear=document.querySelector('[data-ledger-search="clear"]');if(clear)clear.style.display=query.trim()||visual?"inline-flex":"none";
  const hasQuery=visual||!!query.trim();
  const show=expanded&&hasQuery;
@@ -98,11 +118,21 @@ function draw(){
 }
 document.addEventListener("input",event=>{
  if(event.target.id==="ledger-query"){
+  if(isGatewayUrl(event.target.value)){
+   event.target.value="";query="";visual=false;visualError="";expanded=false;draw();return;
+  }
   query=event.target.value;visual=false;visualError="";expanded=true;draw();
  }
 });
 document.addEventListener("focusin",event=>{
- if(event.target.id==="ledger-query"&&(query.trim()||visual)){expanded=true;draw()}
+ if(event.target.id==="ledger-query"){
+  event.target.readOnly=false;
+  resetAutofilledUrl();
+  if(query.trim()||visual){expanded=true;draw();}
+ }
+});
+document.addEventListener("pointerdown",event=>{
+ if(event.target.id==="ledger-query")event.target.readOnly=false;
 });
 document.addEventListener("click",event=>{
  const type=event.target.closest('[data-ledger-search]')?.dataset.ledgerSearch;
