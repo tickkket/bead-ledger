@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#315e51">
+<title>记账本 · 更新检查 v53</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f8f7f4;color:#263b31;font-family:system-ui,-apple-system,"PingFang SC",sans-serif;padding:24px 16px;line-height:1.6}
+main{margin:4vh auto;max-width:480px;background:white;border-radius:18px;padding:24px 20px;box-shadow:0 2px 18px #25372918}
+h1{font-size:22px;margin:0 0 8px}.pill{display:inline-block;background:#e4eee7;border-radius:99px;padding:2px 11px;font-weight:650;color:#315e51}
+button,a.action{display:block;width:100%;text-align:center;padding:13px 8px;border:0;border-radius:10px;background:#315e51;color:white;text-decoration:none;font-size:16px;font-weight:600;cursor:pointer;margin:12px 0}
+a.action{background:#eff4f0;color:#315e51;border:1px solid #bfd3c6}
+#status{white-space:pre-line;background:#f2f6f2;padding:12px;border-radius:10px;margin-top:14px;min-height:70px;font-size:14px}
+.note{color:#627469;font-size:13px;margin:10px 0}strong{color:#315e51}
+</style></head>
+<body><main>
+<h1>记账本 · 更新检查</h1>
+<p>此检查页的版本：<span class="pill">v53</span></p>
+<p class="note">这是专门用于诊断旧版缓存的独立页面。无需删除桌面应用，不会清除手机本地的库存、照片或账目。</p>
+<button type="button" id="check">检查并尝试安装新版</button>
+<a class="action" id="open" href="./index.html?from_release_check=53">返回记账本</a>
+<div id="status" role="status" aria-live="polite">点击上方按钮检查实际发布版本。</div>
+<p class="note">请先保存记账本中未提交的表单。如果此页面显示“v53”但记账本顶部还没有“v53”，说明网站已更新，问题主要在手机旧页面或 PWA 缓存。</p>
+</main>
+<script>
+(function(){
+"use strict";
+const target=53;
+const button=document.getElementById("check");
+const output=document.getElementById("status");
+const report=s=>{output.textContent=s};
+button.onclick=async()=>{
+ button.disabled=true;
+ try{
+  if(!navigator.onLine)throw Error("设备当前离线，请联网后重试。");
+  const stamp=Date.now();
+  const swURL=new URL("./sw.js?release_probe="+stamp,location.href);
+  const indexURL=new URL("./index.html?release_probe="+stamp,location.href);
+  const responses=await Promise.all([
+   fetch(swURL,{cache:"no-store"}),
+   fetch(indexURL,{cache:"no-store"})
+  ]);
+  if(!responses[0].ok||!responses[1].ok)throw Error("网站发布文件暂时不可读取。HTTP "+responses.map(x=>x.status).join("/"));
+  const [script,html]=await Promise.all(responses.map(r=>r.text()));
+  const onlineSW=Number(script.match(/bead-stall-ledger-pwa-v(\d+)/)?.[1]||0);
+  const onlineUI=Number(html.match(/UI_RELEASE\s*=\s*(\d+)/)?.[1]||0);
+  if(onlineSW<target||onlineUI<target){
+   report("检测到网站仍在提供旧文件：\n页面版本 v"+(onlineUI||"?")+" · 更新程序 v"+(onlineSW||"?")+"。\n暂时不建议清缓存；这是线上发布或缓存未同步的问题。");
+   return;
+  }
+  if(!("serviceWorker" in navigator)){
+   report("线上文件已经是 v"+target+"，但此浏览器不支持自动更新，请直接从此页面返回记账本。");
+   return;
+  }
+  const reg=await navigator.serviceWorker.register("./sw.js",{scope:"./",updateViaCache:"none"});
+  await reg.update();
+  if(reg.waiting){
+   reg.waiting.postMessage({type:"SKIP_WAITING"});
+   report("线上页面与更新程序均已是 v"+target+"，已请求启用新版。请点击「返回记账本」。");
+  }else if(reg.installing){
+   report("线上页面与更新程序均已是 v"+target+"，新版正在安装。请重新进入本页面检查，或点击「返回记账本」。");
+  }else{
+   report("线上页面与更新程序均已是 v"+target+"。没有待安装的新版本；请点击「返回记账本」查看顶部版本号。");
+  }
+ }catch(e){report("检查失败："+(e?.message||e)+"\n你的历史账目不会受到影响。");}
+ finally{button.disabled=false}
+};
+document.getElementById("open").onclick=event=>{
+ event.preventDefault();
+ const u=new URL("./index.html",location.href);
+ u.searchParams.set("ledger_update",String(target));
+ u.searchParams.set("t",String(Date.now()));
+ location.assign(u.href);
+};
+})();
+</script></body></html>
