@@ -5,6 +5,8 @@ const $=s=>root.querySelector(s);
 const escape=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const channels=["","小红书","淘宝","拼多多","1688","闲鱼","抖音","微信","线下批发","其他"];
 let next=0,busy=false,photos={};
+const usageOptions=(selected="未用")=>["未用","已用","已卖","自戴"].map(v=>'<option value="'+v+'" '+(v===selected?'selected':'')+'>'+v+'</option>').join("");
+const usageFromText=text=>window.BeadUsageStatusFromText?.(text)||"未用";
 root.innerHTML='<label>每行一款外购成品</label><textarea class="local-field" id="out-lines" rows="3" placeholder="珍珠耳夹3对，进价12元，售价39元；水晶手串2件，进价25元，售价68元"></textarea><div class="local-row"><button type="button" class="local-btn" data-out="parse">识别多款</button><button type="button" class="local-btn" data-out="add">＋ 加一款</button><button type="button" class="local-btn" data-out="draft">保存草稿</button></div><div id="out-list"></div><button type="button" class="local-btn main" data-out="save">核对后批量入库</button><div id="out-msg" class="local-result" role="status"></div>';
 const say=(s,error)=>{const x=$("#out-msg");x.textContent=s;x.style.color=error?"#b44545":"#315e51"};
 function parse(t){
@@ -80,7 +82,7 @@ async function clearPhotoDraft(){
 function saveDraft(){
  const rows=[...root.querySelectorAll("[data-out-row]")].map(section=>{
   const get=k=>section.querySelector('[data-field="'+k+'"]')?.value??"";
-  return {name:get("name"),price:get("price"),qty:get("qty"),cost:get("cost"),channel:get("channel"),detail:get("detail"),sameOnline:get("sameOnline"),notes:get("notes")};
+  return {name:get("name"),price:get("price"),qty:get("qty"),cost:get("cost"),channel:get("channel"),detail:get("detail"),sameOnline:get("sameOnline"),usageStatus:get("usageStatus"),notes:get("notes")};
  });
  try{localStorage.setItem(OUT_DRAFT_KEY,JSON.stringify({rows,lines:$("#out-lines").value,savedAt:Date.now()}));return true}
  catch(e){console.warn("无法暂存外购成品草稿",e);say("草稿自动暂存失败，请先备份文字",true);return false}
@@ -95,7 +97,7 @@ function loadDraft(){
    const last=[...root.querySelectorAll("[data-out-row]")].at(-1);
    if(last){
     const put=(k,v)=>{const el=last.querySelector('[data-field="'+k+'"]');if(el)el.value=String(v??"")};
-    put("detail",item.detail);put("sameOnline",item.sameOnline);put("notes",item.notes);
+    put("detail",item.detail);put("sameOnline",item.sameOnline);put("usageStatus",item.usageStatus||"未用");put("notes",item.notes);
    }
   }
   if(draft.rows?.length)say("已恢复 "+draft.rows.length+" 款未保存草稿；照片需重新添加。");
@@ -109,7 +111,8 @@ function draw(r={}){
  const channelOptions=channels.map(x=>'<option value="'+escape(x)+'" '+(x===r.channel?'selected':'')+'>'+escape(x||"请选择")+'</option>').join("");
  return '<section data-out-row="'+id+'" style="padding:10px;margin:9px 0;border:1px solid #d5e1d9;border-radius:10px;background:white">'+
  '<div class="local-row"><strong>外购成品 · 非手作</strong><button class="local-btn" type="button" data-out="remove">移除</button></div><div class="di-grid">'+
- '<div class="di-full">'+field("名称 *","name",r.name||"")+'</div>'+
+ '<div class="di-full">'+field("名称 *","name",r.name||"")+'</div>'+ 
+ '<label>使用状态（必选）<select class="local-field" data-field="usageStatus">'+usageOptions(r.usageStatus||usageFromText(r.text||""))+'</select></label>'+
  field("售价（元）*","price",r.price??"","number")+
  field("入库件数 *","qty",r.qty??1,"number")+
  field("每件进价（元）*","cost",r.cost??"","number")+
@@ -130,14 +133,15 @@ async function save(){
   const items=sections.map((el,i)=>{
    const v=k=>el.querySelector('[data-field="'+k+'"]')?.value?.trim()??"";
    const name=v("name"),q=v("qty"),c=v("cost"),p=v("price"),qty=Number(q),buyPrice=Number(c),price=Number(p);
-   const which="第"+(i+1)+"款";
+   const which="第"+(i+1)+"款",usageStatus=v("usageStatus");
+   if(!["未用","已用","已卖","自戴"].includes(usageStatus))throw Error(which+"请选择使用状态");
    if(!name)throw Error(which+"缺少名称");
    if(q===""||!Number.isInteger(qty)||qty<1)throw Error(which+"件数无效");
    if(c===""||!Number.isFinite(buyPrice)||buyPrice<0)throw Error(which+"每件进价无效");
    if(p===""||!Number.isFinite(price)||price<0)throw Error(which+"售价无效");
    let source;try{source=makePurchaseSource(v("channel"),v("detail"))}catch(e){throw Error(which+"渠道："+e.message)}
    const id=uid();
-   return {id,type:"out",name,price,producedQty:qty,stock:qty,buyPrice,source,sameOnline:v("sameOnline")==="1",notes:v("notes"),image:photos[el.dataset.outRow]||"",createdAt:new Date().toISOString(),cost:{unit:buyPrice,material:buyPrice,labor:0,stall:0,tool:0}};
+   return {id,type:"out",name,usageStatus,price,producedQty:qty,stock:qty,buyPrice,source,sameOnline:v("sameOnline")==="1",notes:v("notes"),image:photos[el.dataset.outRow]||"",createdAt:new Date().toISOString(),cost:{unit:buyPrice,material:buyPrice,labor:0,stall:0,tool:0}};
   });
   if(!confirm("确定入库 "+items.length+" 款，共 "+items.reduce((n,x)=>n+x.producedQty,0)+" 件外购成品？"))return;
   await commit(()=>state.products.push(...items),"外购成品已批量入库");
@@ -153,7 +157,7 @@ root.addEventListener("click",async e=>{
   const lines=$("#out-lines").value.split(/[；;\n]+/).map(x=>x.trim()).filter(Boolean);
   if(!lines.length)return say("请输入描述",true);
   if(lines.length>30)return say("每次最多识别30款",true);
-  lines.forEach(line=>add(parse(line)));$("#out-lines").value="";saveDraft();storePhotos();say("已识别"+lines.length+"款，请核对");return;
+  lines.forEach(line=>add({...parse(line),text:line,usageStatus:usageFromText(line)}));$("#out-lines").value="";saveDraft();storePhotos();say("已识别"+lines.length+"款，请核对");return;
  }
  if(type==="save"){await save();return}
  if(type==="draft"){const textOK=saveDraft(),photosOK=await storePhotos();if(textOK&&photosOK)say("文字与照片草稿已保存到本机");else say("草稿没有完整保存，请检查存储空间或权限",true);return}
