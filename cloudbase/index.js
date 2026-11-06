@@ -50,11 +50,14 @@ function validate(value){
  });
 }
 function parseJSON(txt){
- const s=String(txt||"").trim();
+ const raw=Array.isArray(txt)?txt.filter(x=>x&&x.type==="text").map(x=>x.text||"").join("\n"):txt;
+ const s=String(raw||"").trim();
+ if(!s)throw Object.assign(new Error("empty"),{code:"MODEL_EMPTY"});
  try{return JSON.parse(s)}catch{}
  const a=s.indexOf("{"),b=s.lastIndexOf("}");
- if(a<0||b<=a)throw Error("Invalid model JSON");
- return JSON.parse(s.slice(a,b+1));
+ if(a<0||b<=a)throw Object.assign(new Error("not-json"),{code:"MODEL_FORMAT"});
+ try{return JSON.parse(s.slice(a,b+1))}
+ catch{throw Object.assign(new Error("bad-json"),{code:"MODEL_JSON"});}
 }
 async function onRequest(context){
  const req=context.request,env=context.env||{};
@@ -73,18 +76,41 @@ async function onRequest(context){
  if(typeof body?.text!=="string"||body.text.trim().length<1||body.text.length>4000)
    return res({error:"请提供1至4000字的进货描述"},400,cors);
  try{
-  const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),28000);
+  const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),26000);
   let upstream;
   try{
    upstream=await fetch(API,{method:"POST",headers:{"Authorization":"Bearer "+env.MAKERS_MODELS_KEY,"Content-Type":"application/json"},
-   body:JSON.stringify({model:String(env.AI_MODEL||"@makers/deepseek-v4-flash"),stream:false,temperature:0,max_tokens:1800,
+   body:JSON.stringify({model:String(env.AI_MODEL||"@makers/deepseek-v4-flash"),stream:false,temperature:0,max_tokens:4096,
    messages:[{role:"system",content:prompt},{role:"user",content:body.text}]}),signal:abort.signal});
   }finally{clearTimeout(timer)}
-  if(!upstream.ok)return res({error:upstream.status===429?"免费额度或调用频率已受限，请使用本地识别":"AI模型不可用（HTTP "+upstream.status+"），请使用本地识别"},502,cors);
-  const result=await upstream.json();
-  return res({items:validate(parseJSON(result?.choices?.[0]?.message?.content)),
-    warning:"AI识别仅供核对，没有自动写入账本",mode:"preview"},200,cors);
- }catch(e){return res({error:e?.name==="AbortError"?"模型响应超时，请使用本地识别":"模型识别结果异常，请使用本地识别"},502,cors)}
+  if(!upstream.ok){
+    const status=upstream.status;
+    const error=status===401||status===403?"Makers Models 密钥无效或无调用权限":status===429?"模型免费额度不足或触发限流":"模型网关返回错误";
+    return res({error:error+"（HTTP "+status+"）",code:"UPSTREAM_HTTP_"+status},502,cors);
+  }
+  let result;
+  try{result=await upstream.json()}catch{
+    return res({error:"模型网关没有返回有效的JSON响应",code:"UPSTREAM_INVALID_JSON"},502,cors);
+  }
+  const choice=result?.choices?.[0];
+  if(!choice)return res({error:"模型网关没有返回结果选项",code:"MODEL_NO_CHOICE"},502,cors);
+  let items;
+  try{items=validate(parseJSON(choice?.message?.content))}
+  catch(err){
+    const code=err?.code||(/^Invalid list/.test(err?.message||"")?"MODEL_ITEMS":/^Invalid row/.test(err?.message||"")?"MODEL_FIELDS":"MODEL_PARSE");
+    const messages={MODEL_EMPTY:"模型没有生成回答（可能因输出长度不足）",MODEL_FORMAT:"模型没有返回JSON格式",
+      MODEL_JSON:"模型返回的JSON不完整",MODEL_ITEMS:"模型返回商品行数量或结构异常",
+      MODEL_FIELDS:"模型返回商品名称、类别或数量不完整",MODEL_PARSE:"模型输出无法正确解析"};
+    return res({error:(messages[code]||messages.MODEL_PARSE)+"，可尝试减少一次识别的商品数量",
+      code,finish_reason:String(choice?.finish_reason||"unknown").slice(0,32)},502,cors);
+  }
+  return res({items,warning:"AI识别仅供核对，没有自动写入账本",mode:"preview"},200,cors);
+ }catch(e){
+  const code=e?.name==="AbortError"?"UPSTREAM_TIMEOUT":e instanceof TypeError?"UPSTREAM_NETWORK":"UPSTREAM_ERROR";
+  const message=code==="UPSTREAM_TIMEOUT"?"模型请求超过26秒，CloudBase云函数或网关可能超时":
+      code==="UPSTREAM_NETWORK"?"CloudBase网络无法连接Makers Models网关":"模型请求发生未知错误";
+  return res({error:message,code},502,cors);
+ }
 }
 
 const PORT = Number(process.env.PORT || 9000);
