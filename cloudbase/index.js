@@ -55,6 +55,8 @@ function validate(value, input){
    // Do not guess uncertain classes. Only known metal taxonomy or explicit finished context.
    if(/龙虾扣|双吊|扣头|隔珠|隔片|小滴流|耳钩|耳夹|连接扣/.test(name))kind="metal";
    else if(/(?:手链|项链|手串|耳环|戒指|成品饰品)/.test(name)&&!/半成品|原料/.test(name))kind="finished";
+   else if(/^一\s*条/.test(segment)&&/\d+(?:\.\d+)?\s*元/.test(segment)&&!/半成品|原料/.test(name+" "+segment))kind="finished";
+   else if(/半成品|原料串/.test(name+" "+segment))kind="bead";
   }
   let unit=str(x.unit||x.quantityUnit,8);
   unit=unitAliases[unit]||unit;
