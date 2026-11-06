@@ -1,173 +1,128 @@
-/* Stable touch picker. Native <select> stays as the actual form field.
-   On touch devices a separate HTML button displays choices, so Android's
-   native select popup is never invoked or cancelled by touch interceptors. */
+/* Touch-safe inline selectors for bead ledger (v58).
+   Standard <details>/<summary> and regular buttons replace unreliable
+   Android native select popups and earlier full-screen touch overlays.
+   The hidden original select remains the authoritative form field. */
 (()=>{
- "use strict";
- const touch=()=>{try{return matchMedia("(pointer:coarse)").matches||navigator.maxTouchPoints>0}catch{return false}};
- if(!touch())return;
- const KEY="bead-ledger-use-native-select";
- let modal=null,activeSelect=null,scheduled=false;
- const css=[
-  "select.ledger-touch-source{display:none!important}",
-  ".ledger-touch-launcher{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:41px;width:100%;border:1px solid #dcded8;background:#fff;color:#26392f;border-radius:10px;padding:10px 12px;text-align:left;font:inherit;font-size:inherit;cursor:pointer;touch-action:manipulation}",
-  ".ledger-touch-launcher[hidden]{display:none!important}",
-  ".ledger-touch-launcher:disabled{opacity:.55}",
-  ".ledger-touch-launcher:focus-visible{outline:2px solid #315e51;outline-offset:2px}",
-  ".ledger-touch-launcher .ledger-touch-arrow{color:#728079;flex-shrink:0}",
-  "#ledger-touch-overlay{position:fixed;inset:0;z-index:2147483000;background:#13221aab;display:flex;align-items:flex-end;justify-content:center;font-family:system-ui,-apple-system,'PingFang SC',sans-serif;color:#263b31}",
-  "#ledger-touch-overlay *{box-sizing:border-box}",
-  "#ledger-touch-overlay .ledger-touch-sheet{width:min(600px,100%);max-height:88dvh;max-height:88vh;background:#fff;border-radius:18px 18px 0 0;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px);box-shadow:0 -8px 32px #0003}",
-  "#ledger-touch-overlay .ledger-touch-top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid #e4ebe5}",
-  "#ledger-touch-overlay .ledger-touch-top strong{font-size:16px;line-height:1.35}",
-  "#ledger-touch-overlay .ledger-touch-cancel{border:0;border-radius:9px;background:#edf3ee;color:#315e51;padding:9px 12px;font:inherit;cursor:pointer}",
-  "#ledger-touch-overlay .ledger-touch-filter{margin:0;padding:12px 16px;border:0;border-bottom:1px solid #e7ebe8;width:100%;font-size:16px;background:#fff;color:#26392f;outline:none}",
-  "#ledger-touch-overlay .ledger-touch-list{min-height:60px;overflow-y:auto;overscroll-behavior:contain;padding:7px 10px 18px}",
-  "#ledger-touch-overlay .ledger-touch-option{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;border:0;border-radius:10px;background:#fff;color:#26392f;padding:13px 12px;min-height:47px;text-align:left;font:inherit;font-size:15px;cursor:pointer;touch-action:manipulation;overflow-wrap:anywhere}",
-  "#ledger-touch-overlay .ledger-touch-option[aria-selected='true']{background:#e9f2eb;color:#285a45;font-weight:650}",
-  "#ledger-touch-overlay .ledger-touch-option:disabled{opacity:.4}",
-  "#ledger-touch-overlay .ledger-touch-empty{text-align:center;padding:20px;color:#78857b}",
-  "html.ledger-native-mode select.ledger-touch-source{display:block!important}",
-  "html.ledger-native-mode .ledger-touch-launcher{display:none!important}"
- ].join("\n");
- function isNative(){
-  try{return localStorage.getItem(KEY)==="1"}catch{return false}
+"use strict";
+const touch=()=>{try{return !!(matchMedia("(pointer:coarse)").matches||navigator.maxTouchPoints>0)}catch{return false}};
+if(!touch())return;
+const KEY="bead-ledger-use-native-select";
+const nativeMode=()=>{try{return localStorage.getItem(KEY)==="1"}catch{return false}};
+const CSS=[
+ "select.ledger-inline-native{display:none!important}",
+ ".ledger-inline-choices{display:block;width:100%;min-width:0;margin:0 0 6px;color:#26392f;font:inherit}",
+ ".ledger-inline-choices summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:9px;min-height:41px;width:100%;border:1px solid #dcded8;background:white;border-radius:10px;padding:10px 11px;cursor:pointer;font:inherit;touch-action:manipulation;overflow-wrap:anywhere}",
+ ".ledger-inline-choices summary::-webkit-details-marker{display:none}",
+ ".ledger-inline-choices summary:after{content:'▾';flex-shrink:0;color:#667b70}",
+ ".ledger-inline-choices[open] summary{border-color:#6a9a82;border-radius:10px 10px 0 0;background:#f4f8f5}",
+ ".ledger-inline-choices[open] summary:after{content:'▴'}",
+ ".ledger-inline-list{border:1px solid #b9cdc0;border-top:0;border-radius:0 0 10px 10px;background:white;max-height:38vh;overflow:auto;overscroll-behavior:contain;padding:5px;box-shadow:0 5px 12px #15291a10}",
+ ".ledger-inline-list button{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;width:100%;min-height:45px;padding:11px 10px;border:0;border-radius:7px;background:white;color:#283c31;font:inherit;font-size:15px;cursor:pointer;touch-action:manipulation;overflow-wrap:anywhere}",
+ ".ledger-inline-list button[aria-selected=true]{background:#e4f0e7;color:#275c43;font-weight:600}",
+ ".ledger-inline-list button:disabled{opacity:.4}",
+ ".ledger-inline-list .ledger-inline-empty{font-size:13px;color:#7b897c;padding:15px}",
+ ".ledger-inline-filter{width:100%;font-size:16px;padding:10px 11px;border:1px solid #d7e4da;border-radius:8px;margin:3px 0 7px;outline:none}",
+ ".field.ledger-inline-expanded{grid-column:1 / -1}",
+ "html.ledger-select-native select.ledger-inline-native{display:block!important}",
+ "html.ledger-select-native .ledger-inline-choices{display:none!important}"
+].join("\n");
+const style=document.createElement("style");style.id="ledger-select-style-v58";style.textContent=CSS;document.head.append(style);
+let queued=false;
+function description(s){
+ const selected=s.selectedOptions?.[0]||s.options[s.selectedIndex];
+ return String(selected?.textContent||selected?.label||"请选择").trim()||"请选择";
+}
+function update(s){
+ const details=s._ledgerInline;
+ if(!details?.isConnected)return;
+ const title=details.querySelector("summary .ledger-inline-current");
+ const text=description(s);
+ if(title&&title.textContent!==text)title.textContent=text;
+ const hidden=!!(s.hidden||s.disabled||s.style.display==="none");
+ if(details.hidden!==hidden)details.hidden=hidden;
+}
+function choose(s,index){
+ if(!s?.isConnected||s.disabled)return;
+ const op=s.options[index];
+ if(!op||op.disabled||op.parentElement?.disabled)return;
+ const changed=s.selectedIndex!==index;
+ const details=s._ledgerInline;
+ if(details)details.open=false;
+ const parent=details?.closest(".field");
+ parent?.classList.remove("ledger-inline-expanded");
+ s.selectedIndex=index;
+ update(s);
+ if(changed){
+  s.dispatchEvent(new Event("input",{bubbles:true}));
+  s.dispatchEvent(new Event("change",{bubbles:true}));
  }
- function textLabel(s){
-  const option=s.selectedOptions?.[0]||s.options?.[s.selectedIndex];
-  return String(option?.textContent||option?.label||"请选择").trim()||"请选择";
+}
+function optionsFor(s,list,filter=""){
+ list.replaceChildren();
+ const matches=[...s.options].map((op,i)=>({op,i})).filter(({op})=>!op.hidden&&String(op.textContent||op.label||"").toLowerCase().includes(filter));
+ if(!matches.length){const msg=document.createElement("p");msg.className="ledger-inline-empty";msg.textContent="没有匹配的选项";list.append(msg);return}
+ const fragment=document.createDocumentFragment();
+ for(const {op,i} of matches){
+  const b=document.createElement("button");b.type="button";b.textContent=String(op.textContent||op.label||"（空白）");
+  b.disabled=!!(op.disabled||op.parentElement?.disabled);
+  b.setAttribute("aria-selected",String(s.selectedIndex===i));
+  if(s.selectedIndex===i){const tick=document.createElement("span");tick.textContent="✓";tick.setAttribute("aria-hidden","true");b.append(tick)}
+  b.addEventListener("click",event=>{event.preventDefault();event.stopPropagation();choose(s,i)});
+  fragment.append(b);
  }
- function title(s){
-  const label=s.labels?.[0]||s.closest(".field")?.querySelector("label")||s.closest("label")||s.parentElement?.querySelector("label");
-  return String(s.getAttribute("aria-label")||label?.textContent||"请选择").trim().replace(/\s+/g," ").slice(0,65)||"请选择";
- }
- function update(s){
-  const b=s.nextElementSibling;
-  if(!b?.classList.contains("ledger-touch-launcher")||b._sourceSelect!==s)return;
-  const label=b.querySelector(".ledger-touch-current");
-  if(label&&label.textContent!==textLabel(s))label.textContent=textLabel(s);
-  // Assigning the *same* boolean attribute can still enqueue MutationObserver
-  // records on Android/Chromium. Guard updates to prevent re-entrant redraw loops.
-  const disabled=!!(s.disabled||s.options.length===0);
-  const hidden=!!(s.hidden||s.style.display==="none");
-  if(b.disabled!==disabled)b.disabled=disabled;
-  if(b.hidden!==hidden)b.hidden=hidden;
- }
- function enhance(){
-  if(isNative()){document.documentElement.classList.add("ledger-native-mode");return}
-  document.documentElement.classList.remove("ledger-native-mode");
-  for(const s of document.querySelectorAll("select")){
-   if(s.closest("#ledger-touch-overlay")||s.dataset.ledgerPickerSkip==="true")continue;
-   let b=s.nextElementSibling;
-   if(!b?.classList.contains("ledger-touch-launcher")||b._sourceSelect!==s){
-    b=document.createElement("button");
-    b.type="button";b.className="ledger-touch-launcher";b._sourceSelect=s;
-    b.setAttribute("aria-haspopup","listbox");
-    const label=document.createElement("span");label.className="ledger-touch-current";
-    const arrow=document.createElement("span");arrow.className="ledger-touch-arrow";arrow.textContent="▾";arrow.setAttribute("aria-hidden","true");
-    b.append(label,arrow);
-    b.addEventListener("click",event=>{
-     event.preventDefault();event.stopPropagation();open(s);
-    });
-    s.insertAdjacentElement("afterend",b);
-    s.classList.add("ledger-touch-source");
-   }
-   update(s);
-  }
- }
- function schedule(){
-  if(scheduled)return;
-  scheduled=true;
-  queueMicrotask(()=>{scheduled=false;enhance()});
- }
- function close(){
-  if(modal)modal.remove();
-  modal=null;activeSelect=null;
- }
- function choose(index){
-  const s=activeSelect;
-  if(!s?.isConnected){close();return}
-  const item=s.options[index];
-  if(!item||item.disabled||item.parentElement?.disabled){return}
-  const changed=s.selectedIndex!==index;
-  close();
-  s.selectedIndex=index;
-  update(s);
-  if(changed){
-   s.dispatchEvent(new Event("input",{bubbles:true}));
-   s.dispatchEvent(new Event("change",{bubbles:true}));
-  }
-  schedule();
- }
- function open(s){
-  if(!s?.isConnected||s.disabled||s.options.length===0)return;
-  close();
-  activeSelect=s;
-  const items=[...s.options].map((o,i)=>({index:i,text:String(o.textContent||o.label||"").trim()||"（空白）",disabled:o.disabled||!!o.parentElement?.disabled,hidden:o.hidden})).filter(o=>!o.hidden);
-  if(!items.length){activeSelect=null;return}
-  const overlay=document.createElement("div");overlay.id="ledger-touch-overlay";overlay.setAttribute("role","dialog");overlay.setAttribute("aria-modal","true");
-  const sheet=document.createElement("div");sheet.className="ledger-touch-sheet";
-  const head=document.createElement("div");head.className="ledger-touch-top";
-  const heading=document.createElement("strong");heading.textContent=title(s);
-  const cancel=document.createElement("button");cancel.type="button";cancel.className="ledger-touch-cancel";cancel.textContent="取消";
-  cancel.addEventListener("click",event=>{event.preventDefault();event.stopPropagation();close()});
-  head.append(heading,cancel);sheet.append(head);
-  let filter=null;
-  if(items.length>=14){
-   filter=document.createElement("input");filter.type="search";filter.className="ledger-touch-filter";filter.placeholder="搜索选项…";filter.autocomplete="off";
-   sheet.append(filter);
-  }
-  const list=document.createElement("div");list.className="ledger-touch-list";list.setAttribute("role","listbox");sheet.append(list);
-  function showOptions(q=""){
+ list.append(fragment);
+}
+function build(s){
+ if(s._ledgerInline?.isConnected)return update(s);
+ if(s.multiple||s.size>1||s.dataset.ledgerPickerSkip==="true")return;
+ const details=document.createElement("details");details.className="ledger-inline-choices";
+ details.setAttribute("aria-label","选择："+(s.getAttribute("aria-label")||s.labels?.[0]?.textContent||"选项").trim());
+ const summary=document.createElement("summary");const current=document.createElement("span");current.className="ledger-inline-current";
+ summary.append(current);details.append(summary);
+ const list=document.createElement("div");list.className="ledger-inline-list";details.append(list);
+ const label=s.closest("label");
+ // Keep the substitute inside any enclosing label so conditional display:none
+ // (e.g. bead-only/metal-only fields) still hides the entire control.
+ s.insertAdjacentElement("afterend",details);
+ s._ledgerInline=details;
+ s.classList.add("ledger-inline-native");
+ details.addEventListener("toggle",()=>{
+  const root=details.closest(".field");
+  if(details.open){
+   document.querySelectorAll("details.ledger-inline-choices[open]").forEach(x=>{if(x!==details)x.open=false});
+   root?.classList.add("ledger-inline-expanded");
    list.replaceChildren();
-   let count=0;
-   for(const item of items){
-    if(q&&!item.text.toLowerCase().includes(q))continue;
-    const b=document.createElement("button");b.type="button";b.className="ledger-touch-option";
-    b.disabled=item.disabled;b.setAttribute("role","option");b.setAttribute("aria-selected",String(s.selectedIndex===item.index));
-    const t=document.createElement("span");t.textContent=item.text;b.append(t);
-    if(s.selectedIndex===item.index){const tick=document.createElement("span");tick.textContent="✓";tick.setAttribute("aria-hidden","true");b.append(tick)}
-    // Direct button handlers: no dependence on a bubbled click reaching the backdrop.
-    b.addEventListener("click",ev=>{ev.preventDefault();ev.stopPropagation();choose(item.index)});
-    // Older Android WebViews sometimes lose synthetic click after scrolling overlays.
-    // Accept a stationary touchend; ignore drags so scrolling doesn't select a row.
-    let start=null;
-    b.addEventListener("touchstart",ev=>{const p=ev.touches?.[0];if(p)start={x:p.clientX,y:p.clientY}},{passive:true});
-    b.addEventListener("touchend",ev=>{
-     const p=ev.changedTouches?.[0];if(!p||!start)return;
-     const moved=Math.hypot(p.clientX-start.x,p.clientY-start.y);
-     if(moved>12)return;
-     ev.preventDefault();ev.stopPropagation();choose(item.index);
-    },{passive:false});
-    list.append(b);count++;
-   }
-   if(!count){const empty=document.createElement("div");empty.className="ledger-touch-empty";empty.textContent="没有匹配选项";list.append(empty)}
-  }
-  showOptions();
-  if(filter)filter.addEventListener("input",()=>showOptions(filter.value.trim().toLowerCase()));
-  overlay.append(sheet);
-  overlay.addEventListener("click",ev=>{if(ev.target===overlay)close();ev.stopPropagation()});
-  document.body.append(overlay);modal=overlay;
- }
- function backToNative(){
-  try{localStorage.setItem(KEY,"1")}catch{}
-  document.documentElement.classList.add("ledger-native-mode");
-  close();
- }
- const style=document.createElement("style");style.id="ledger-touch-style-v56";style.textContent=css;document.head.append(style);
- // No native-select pointer interception. A visible button receives a normal tap/click.
- if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",enhance,{once:true});
- else enhance();
- if("MutationObserver" in window){
-  const observer=new MutationObserver(records=>{
-   // Ignore mutations to our generated proxy buttons. Only actual select
-   // attribute changes or added/removed DOM nodes require enhancement.
-   if(records.some(r=>r.type==="childList"||
-     (r.type==="attributes"&&r.target?.tagName==="SELECT")))schedule();
-  });
-  observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:["disabled","hidden","style"]});
- }
- document.addEventListener("change",ev=>{if(ev.target?.tagName==="SELECT")update(ev.target)});
- document.addEventListener("input",ev=>{if(ev.target?.tagName==="SELECT")update(ev.target)});
- document.addEventListener("keydown",ev=>{if(ev.key==="Escape"&&modal){ev.preventDefault();close()}},true);
- window.LedgerMobileSelect={enhance,open,close,choose,backToNative};
+   if(s.options.length>=14){
+    const filter=document.createElement("input");filter.type="search";filter.className="ledger-inline-filter";
+    filter.placeholder="搜索选项…";filter.autocomplete="off";
+    filter.addEventListener("input",()=>{optionsFor(s,options,filter.value.trim().toLowerCase())});
+    const options=document.createElement("div");list.append(filter,options);optionsFor(s,options);
+   }else optionsFor(s,list);
+  }else root?.classList.remove("ledger-inline-expanded");
+ });
+ update(s);
+}
+function enhance(){
+ if(nativeMode()){document.documentElement.classList.add("ledger-select-native");return}
+ document.documentElement.classList.remove("ledger-select-native");
+ for(const s of document.querySelectorAll("select"))if(!s.closest(".ledger-inline-choices"))build(s);
+}
+function schedule(){
+ if(queued)return;queued=true;
+ queueMicrotask(()=>{queued=false;enhance()});
+}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",enhance,{once:true});
+else enhance();
+const observer=new MutationObserver(records=>{
+ // Only new/replaced nodes and changes to real native select elements. Ignore
+ // options and button mutations inside our own details to avoid redraw loops.
+ if(records.some(r=>
+   r.type==="attributes"&&r.target?.tagName==="SELECT" ||
+   r.type==="childList"&&!r.target?.closest?.(".ledger-inline-choices")
+ ))schedule();
+});
+observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:["disabled","hidden","style"]});
+document.addEventListener("change",e=>{if(e.target?.tagName==="SELECT")update(e.target)});
+document.addEventListener("input",e=>{if(e.target?.tagName==="SELECT")update(e.target)});
+window.LedgerMobileSelect={enhance,choose,open:s=>{const d=s?._ledgerInline;if(d)d.open=true},close:()=>document.querySelectorAll("details.ledger-inline-choices[open]").forEach(d=>d.open=false)};
 })();
