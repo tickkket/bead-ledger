@@ -3,8 +3,8 @@ const q=id=>document.getElementById(id),T=x=>String(x??"").trim(),E=x=>T(x).repl
 // Local constants: do not rely on separately cached index.html exposing these names.
 const BEAD_PURCHASE_TYPES=[["loose","散珠（单颗）"],["strand","素串（整串原料）"],["semi","半成品（未完成饰品）"]];
 const BEAD_PURCHASE_LABEL=Object.fromEntries(BEAD_PURCHASE_TYPES);
-const usageChoices=(selected="未用")=>["未用","已用","已卖","自戴"].map(x=>'<option value="'+x+'" '+(x===selected?'selected':'')+'>'+x+'</option>').join("");
-const usageFromText=raw=>window.BeadUsageStatusFromText?.(raw)||"未用";
+const usageChoices=(selected="")=>'<option value="">请选择使用状态</option>'+["未用","已用","已卖","自戴"].map(x=>'<option value="'+x+'" '+(x===selected?'selected':'')+'>'+x+'</option>').join("");
+const usageFromText=raw=>window.BeadUsageStatusFromText?.(raw)||"";
 let draft=null;let rememberedUnit="";let imageData="";let imageBusy=false;let batchDraft=[];let batchImages={};
 function extractLabeledAmounts(input){
  const t=String(input||"").replace(/￥/g,"¥").replace(/[，。；;\n]/g," ");
