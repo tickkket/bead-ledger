@@ -5,8 +5,8 @@ const $=s=>root.querySelector(s);
 const escape=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const channels=["","小红书","淘宝","拼多多","1688","闲鱼","抖音","微信","线下批发","其他"];
 let next=0,busy=false,photos={};
-const usageOptions=(selected="未用")=>["未用","已用","已卖","自戴"].map(v=>'<option value="'+v+'" '+(v===selected?'selected':'')+'>'+v+'</option>').join("");
-const usageFromText=text=>window.BeadUsageStatusFromText?.(text)||"未用";
+const usageOptions=(selected="")=>'<option value="">请选择使用状态</option>'+["未用","已用","已卖","自戴"].map(v=>'<option value="'+v+'" '+(v===selected?'selected':'')+'>'+v+'</option>').join("");
+const usageFromText=text=>window.BeadUsageStatusFromText?.(text)||"";
 root.innerHTML='<label>每行一款外购成品</label><textarea class="local-field" id="out-lines" rows="3" placeholder="珍珠耳夹3对，进价12元，售价39元；水晶手串2件，进价25元，售价68元"></textarea><div class="local-row"><button type="button" class="local-btn" data-out="parse">识别多款</button><button type="button" class="local-btn" data-out="add">＋ 加一款</button><button type="button" class="local-btn" data-out="draft">保存草稿</button></div><div id="out-list"></div><button type="button" class="local-btn main" data-out="save">核对后批量入库</button><div id="out-msg" class="local-result" role="status"></div>';
 const say=(s,error)=>{const x=$("#out-msg");x.textContent=s;x.style.color=error?"#b44545":"#315e51"};
 function parse(t){
@@ -97,7 +97,7 @@ function loadDraft(){
    const last=[...root.querySelectorAll("[data-out-row]")].at(-1);
    if(last){
     const put=(k,v)=>{const el=last.querySelector('[data-field="'+k+'"]');if(el)el.value=String(v??"")};
-    put("detail",item.detail);put("sameOnline",item.sameOnline);put("usageStatus",item.usageStatus||"未用");put("notes",item.notes);
+    put("detail",item.detail);put("sameOnline",item.sameOnline);put("usageStatus",item.usageStatus||"");put("notes",item.notes);
    }
   }
   if(draft.rows?.length)say("已恢复 "+draft.rows.length+" 款未保存草稿；照片需重新添加。");
