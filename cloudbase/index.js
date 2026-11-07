@@ -124,7 +124,9 @@ const blindPrompt=[
  "你是私人手作珠子盲盒整理的审核助手，只返回严格JSON，不要Markdown。",
  "只从用户文字和图片中提取或核对确定的信息，不要臆测材质、卡数、数量、购买价或宝石真伪。",
  "图片主要可辅助观察形状、颜色或包装文字；卡数、数量、品类如不能可靠确认就返回空字符串并追问。",
- '输出JSON对象 {"items":[{"index":0,"name":"黄水晶","card":"17","qty":"2","shape":"圆珠","group":"水晶晶石类","notes":""}],"question":"请补充第2种珠子的卡数？","questions":["..."],"warnings":["仅凭照片无法确认材质"]}。',
+  "手串并不一定要按整串计价：圆珠手串如用户已给出珠子颗数按unit=颗、kind=手串；碎石、直切等无法逐颗计数时按unit=串、kind=手串，qty是串数。不能编造珠子颗数。",
+  "碎石或直切按整串计价且确实没有卡数时可返回card=不适用；其余未提供的卡数须追问，不能杜撰。",
+ '输出JSON对象 {"items":[{"index":0,"name":"黄水晶","card":"17","qty":"2","shape":"圆珠","unit":"颗","kind":"散珠","group":"水晶晶石类","notes":""}],"question":"请补充第2种珠子的卡数？","questions":["..."],"warnings":["仅凭照片无法确认材质"]}。',
  "items包含你能核对的每一种珠子；已有条目优先保留输入中的index（从0开始）。缺少任何一项时返回空字符串，不能写虚假数字填补。",
  "珠子大类只能选择：水晶晶石类、玛瑙玉石类、珍珠类、贝类螺类、木珠种子类、其他类别、其他集合玉石类、待确认品类；不确定就待确认品类。",
  "隔珠、隔片是珠形，不能仅凭这两个词判断是金属配件。",
@@ -145,7 +147,7 @@ async function blindReview(body,env,cors){
  const totalSize=JSON.stringify(body).length;
  if(totalSize>2200000)return res({error:"图片总数据过大，请减少照片数量"},413,cors);
  const rows=rawRows.map((x,i)=>({index:i,name:str(x?.name,120),card:str(x?.card,40),qty:str(x?.qty,20),
-  shape:str(x?.shape,60),group:blindGroups.has(x?.group)?x.group:"待确认品类",
+  shape:str(x?.shape,60),unit:x?.unit==="串"?"串":"颗",kind:x?.kind==="手串"?"手串":"散珠",group:blindGroups.has(x?.group)?x.group:"待确认品类",
   notes:str(x?.notes,160)}));
  const followup=Array.isArray(body.followup)?body.followup.slice(-6).map(x=>str(x,700)):[];
  const modelInput=JSON.stringify({
@@ -188,7 +190,7 @@ async function blindReview(body,env,cors){
    return {index:Number.isInteger(idx)&&idx>=0&&idx<60?idx:i,
     name:str(x?.name,120),card:str(x?.card,40),
     qty:/^[1-9]\d{0,5}$/.test(qty)?qty:"",
-    shape:str(x?.shape,60),group:blindGroups.has(x?.group)?x.group:"待确认品类",
+    shape:str(x?.shape,60),unit:x?.unit==="串"?"串":"颗",kind:x?.kind==="手串"?"手串":"散珠",group:blindGroups.has(x?.group)?x.group:"待确认品类",
     notes:str(x?.notes,200)};
   }):[];
   return res({mode:"blind_review",items,question:str(parsed.question,300),
