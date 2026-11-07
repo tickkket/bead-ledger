@@ -203,26 +203,40 @@ function allocate(){
   status("已生成可复制台账；没有写入正式库存。");
  }catch(e){status(e.message,true)}
 }
+function encodeImage(img){
+ const w=img.width||img.naturalWidth,h=img.height||img.naturalHeight;
+ if(!w||!h)throw Error("照片尺寸不正确");
+ const attempts=[[1200,.82],[1000,.74],[840,.68],[680,.62]];
+ for(const [limit,quality] of attempts){
+  const scale=Math.min(1,limit/Math.max(w,h));
+  const canvas=document.createElement("canvas");
+  canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));
+  const ctx=canvas.getContext("2d");if(!ctx)throw Error("浏览器无法处理图片");
+  ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  const out=canvas.toDataURL("image/jpeg",quality);
+  if(out.length<=500000)return out;
+ }
+ throw Error("照片数据太大，请裁剪局部后重新上传");
+}
 async function compress(file){
  if(!file?.type.startsWith("image/"))throw Error("请选择图片");
  if(file.size>14*1024*1024)throw Error("单张原图最多14MB");
  let bmp;
  if("createImageBitmap" in window)bmp=await createImageBitmap(file);
- else bmp=await new Promise((ok,fail)=>{const uri=URL.createObjectURL(file),im=new Image();im.onload=()=>{URL.revokeObjectURL(uri);ok(im)};im.onerror=()=>{URL.revokeObjectURL(uri);fail(Error("图片无法读取"))};im.src=uri});
- try{
-  const w=bmp.width||bmp.naturalWidth,h=bmp.height||bmp.naturalHeight,f=Math.min(1,720/Math.max(w,h));
-  const canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(w*f));canvas.height=Math.max(1,Math.round(h*f));
-  const ctx=canvas.getContext("2d");if(!ctx)throw Error("浏览器无法压缩图片");
-  ctx.fillStyle="white";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bmp,0,0,canvas.width,canvas.height);
-  let out=canvas.toDataURL("image/jpeg",.67);
-  if(out.length>420000){
-   const c=document.createElement("canvas");const g=Math.min(1,520/Math.max(w,h));c.width=Math.max(1,Math.round(w*g));c.height=Math.max(1,Math.round(h*g));
-   c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
-   out=c.toDataURL("image/jpeg",.56);
-  }
-  if(out.length>520000)throw Error("压缩后图片仍过大，请换一张尺寸更小的");
-  return out;
- }finally{bmp.close?.()}
+ else bmp=await new Promise((ok,fail)=>{
+  const uri=URL.createObjectURL(file),im=new Image();
+  im.onload=()=>{URL.revokeObjectURL(uri);ok(im)};
+  im.onerror=()=>{URL.revokeObjectURL(uri);fail(Error("图片无法读取"))};
+  im.src=uri;
+ });
+ try{return encodeImage(bmp)}finally{bmp.close?.()}
+}
+async function compressData(data){
+ const img=await new Promise((ok,fail)=>{
+  const im=new Image();im.onload=()=>ok(im);im.onerror=()=>fail(Error("图片无法读取"));im.src=data;
+ });
+ return encodeImage(img);
 }
 async function photos(files){
  sync();
@@ -236,7 +250,7 @@ async function editPhoto(i){
  if(!window.BeadPhotoEditor?.open)throw Error("图片编辑器未加载");
  sync();
  const result=await window.BeadPhotoEditor.open(photo.edited||photo.original);
- if(result){photo.edited=result;clearOutput();render();status("已保存编辑效果，原图仍保留；可随时恢复。")}
+ if(result){photo.edited=await compressData(result);clearOutput();render();status("已保存编辑效果，原图仍保留；可随时恢复。")}
 }
 function restorePhoto(i){
  const photo=state.images[i];if(!photo)return;
@@ -247,7 +261,7 @@ async function cameraPhoto(){
  if(!window.BeadPhotoAccess?.camera)throw Error("拍照组件尚未加载");
  sync();
  await window.BeadPhotoAccess.camera(async data=>{
-  const idx=state.images.push({original:data,edited:null,source:"直接拍照"})-1;
+  const idx=state.images.push({original:await compressData(data),edited:null,source:"直接拍照"})-1;
   clearOutput();render();status("拍照成功，可在接下来的编辑器中裁剪或旋转；取消编辑也会保留原图。");
   await editPhoto(idx);
  });
@@ -257,7 +271,7 @@ async function pastePhoto(){
  if(!window.BeadPhotoAccess?.clipboard)throw Error("当前浏览器不支持读取剪贴板图片");
  sync();
  await window.BeadPhotoAccess.clipboard(async data=>{
-  state.images.push({original:data,edited:null,source:"剪贴板"});
+  state.images.push({original:await compressData(data),edited:null,source:"剪贴板"});
   clearOutput();render();status("已添加剪贴板图片，可点击“编辑”进行裁剪。");
  });
 }
