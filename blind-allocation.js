@@ -55,6 +55,8 @@ function parseLines(input){
   }
   name=str(name).replace(/^\d+[、.)．]\s*/,"").replace(/[\s,，：:]+$/,"");
   card=str(card).replace(/卡数|卡/g,"");
+  if(!unit&&/串$/.test(qty))unit="串";
+  if(!kind&&unit==="串")kind="手串";
   qty=str(qty).replace(/(?:颗|粒|个|串)$/,"");
   if(/(?:购买|实付|总价|元|账单)/.test(name)&&!qty&&!card)continue;
   if(name||card||qty||shape)out.push(cleanRow({name,card,qty,shape,unit,kind,notes}));
