@@ -126,6 +126,13 @@ function planEdit(id,meta,premiumRows,welfareData){
   }
   return {...r,amount,old};
  });
+ const removed=linked.filter(m=>!linkedIDs.has(m.id));
+ for(const m of removed){
+  required(n(m.qty)===n(m.initialQty??m.qty),'「'+m.name+'」已经消耗，不能删除');
+  required(!state.products.some(p=>p.components?.some(c=>c.id===m.id)),'「'+m.name+'」被手作配方引用，不能删除');
+  required(!state.adjustments.some(a=>a.materialId===m.id),'「'+m.name+'」已有库存盘点记录，不能删除');
+  required(!(state.legacySales||[]).some(s=>s.materialId===m.id),'「'+m.name+'」已有销售记录，不能删除');
+ }
  const cents=Math.round(meta.total*100);
  const allocations=meta.split==='even'
   ?premiumRows.map((_,i)=>Math.floor(cents/premiumRows.length)+(i<cents%premiumRows.length?1:0))
@@ -158,13 +165,6 @@ function planEdit(id,meta,premiumRows,welfareData){
    grade:old?.grade||'普通',flaw:old?.flaw||'',weight:old?.weight||0,
    createdAt:old?.createdAt||new Date().toISOString()};
  });
- const removed=linked.filter(m=>!linkedIDs.has(m.id));
- for(const m of removed){
-  required(n(m.qty)===n(m.initialQty??m.qty),'「'+m.name+'」已经消耗，不能删除');
-  required(!state.products.some(p=>p.components?.some(c=>c.id===m.id)),'「'+m.name+'」被手作配方引用，不能删除');
-  required(!state.adjustments.some(a=>a.materialId===m.id),'「'+m.name+'」已有库存盘点记录，不能删除');
-  required(!(state.legacySales||[]).some(s=>s.materialId===m.id),'「'+m.name+'」已有销售记录，不能删除');
- }
  const totalQty=premiums.length+welfareSpecs.reduce((a,r)=>a+r.amount,0);
  const nextBatch={...batch,title:meta.title,totalCost:cents/100,totalQty,premiumQty:premiums.length,
   welfareQty:totalQty-premiums.length,source:meta.source,date:meta.date,notes:meta.notes,
