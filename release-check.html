@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#315e51">
-<title>记账本 · 更新检查 v61</title>
+<title>记账本 · 更新检查 v62</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f8f7f4;color:#263b31;font-family:system-ui,-apple-system,"PingFang SC",sans-serif;padding:24px 16px;line-height:1.6}
 main{margin:4vh auto;max-width:480px;background:white;border-radius:18px;padding:24px 20px;box-shadow:0 2px 18px #25372918}
@@ -16,17 +16,17 @@ a.action{background:#eff4f0;color:#315e51;border:1px solid #bfd3c6}
 </style></head>
 <body><main>
 <h1>记账本 · 更新检查</h1>
-<p>此检查页的版本：<span class="pill">v61</span></p>
+<p>此检查页的版本：<span class="pill">v62</span></p>
 <p class="note">这是专门用于诊断旧版缓存的独立页面。无需删除桌面应用，不会清除手机本地的库存、照片或账目。</p>
 <button type="button" id="check">检查并尝试安装新版</button>
 <a class="action" id="open" href="./index.html?from_release_check=53">返回记账本</a>
 <div id="status" role="status" aria-live="polite">点击上方按钮检查实际发布版本。</div>
-<p class="note">请先保存记账本中未提交的表单。如果此页面显示“v61”但记账本顶部还没有“v61”，说明网站已更新，问题主要在手机旧页面或 PWA 缓存。</p>
+<p class="note">请先保存记账本中未提交的表单。如果此页面显示“v62”但记账本顶部还没有“v62”，说明网站已更新，问题主要在手机旧页面或 PWA 缓存。</p>
 </main>
 <script>
 (function(){
 "use strict";
-const target=61;
+const target=62;
 const button=document.getElementById("check");
 const output=document.getElementById("status");
 const report=s=>{output.textContent=s};

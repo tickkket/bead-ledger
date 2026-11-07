@@ -1,7 +1,7 @@
 /* Offline ledger PWA. App data stays in IndexedDB; updating the app shell does not erase records. */
 (()=>{
  "use strict";
- const BUILD=61;
+ const BUILD=62;
  let installPrompt=null,reloading=false,checking=false,registration=null,noticed=false;
  const isInstalled=()=>matchMedia("(display-mode:standalone)").matches||navigator.standalone===true;
  const isEditing=()=>!!document.querySelector("#editor,#bead-edit-shade,#bead-photo-overlay,#local-shade.open");

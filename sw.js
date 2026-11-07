@@ -1,5 +1,5 @@
 /* Offline app shell; ledger records are stored in IndexedDB, not in this cache. */
-const CACHE="bead-stall-ledger-pwa-v61";
+const CACHE="bead-stall-ledger-pwa-v62";
 const FILES=["./","./index.html","./pwa.js","./release-check.html","./ai-assistant.js","./hand-material.js","./metal-accessories.js","./legacy-clearance.js","./blind-edit.js","./daily-intake.js","./ai-enhance.js","./smart-hand.js","./smart-out.js","./ledger-search.js","./photo-access.js","./photo-editor.js","./bead-conversion.js","./manifest.webmanifest",
 "./icons/icon-192.png","./icons/icon-512.png","./icons/icon-maskable-512.png","./icons/apple-touch-icon.png"];
 self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))));
