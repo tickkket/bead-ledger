@@ -225,8 +225,41 @@ async function compress(file){
  }finally{bmp.close?.()}
 }
 async function photos(files){
- for(const file of [...files].slice(0,4-state.images.length))state.images.push(await compress(file));
- render();status("已添加 "+state.images.length+" 张本地参考照片；不自动上传，刷新后需要重新选择。");
+ sync();
+ const selected=[...files].slice(0,Math.max(0,4-state.images.length));
+ if(!selected.length){status("最多保留4张照片，请先删除不需要的照片。",true);return}
+ for(const file of selected)state.images.push({original:await compress(file),edited:null,source:"相册上传"});
+ clearOutput();render();status("已添加 "+selected.length+" 张照片。点击图片的“编辑”可裁剪、旋转、增强。照片不自动上传。");
+}
+async function editPhoto(i){
+ const photo=state.images[i];if(!photo)throw Error("照片不存在");
+ if(!window.BeadPhotoEditor?.open)throw Error("图片编辑器未加载");
+ sync();
+ const result=await window.BeadPhotoEditor.open(photo.edited||photo.original);
+ if(result){photo.edited=result;clearOutput();render();status("已保存编辑效果，原图仍保留；可随时恢复。")}
+}
+function restorePhoto(i){
+ const photo=state.images[i];if(!photo)return;
+ sync();photo.edited=null;clearOutput();render();status("已恢复原图。");
+}
+async function cameraPhoto(){
+ if(state.images.length>=4)throw Error("最多4张照片，请先删除一张");
+ if(!window.BeadPhotoAccess?.camera)throw Error("拍照组件尚未加载");
+ sync();
+ await window.BeadPhotoAccess.camera(async data=>{
+  const idx=state.images.push({original:data,edited:null,source:"直接拍照"})-1;
+  clearOutput();render();status("拍照成功，可在接下来的编辑器中裁剪或旋转；取消编辑也会保留原图。");
+  await editPhoto(idx);
+ });
+}
+async function pastePhoto(){
+ if(state.images.length>=4)throw Error("最多4张照片，请先删除一张");
+ if(!window.BeadPhotoAccess?.clipboard)throw Error("当前浏览器不支持读取剪贴板图片");
+ sync();
+ await window.BeadPhotoAccess.clipboard(async data=>{
+  state.images.push({original:data,edited:null,source:"剪贴板"});
+  clearOutput();render();status("已添加剪贴板图片，可点击“编辑”进行裁剪。");
+ });
 }
 function applyAI(data){
  if(!Array.isArray(data.items))throw Error("模型返回的商品列表无效");
@@ -263,7 +296,7 @@ async function callAI(){
  try{
   const res=await fetch(url.href,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+state.token},
    body:JSON.stringify({mode:"blind_review",text:state.description.slice(0,4500),totalPrice:state.total,rows:state.rows,
-    images:state.images.slice(0,4),question:state.lastQuestion,followup:state.messages.filter(m=>m.role==="user").slice(-6).map(m=>m.text)}),signal:abort.signal});
+    images:state.images.slice(0,4).map(x=>x.edited||x.original),originalImages:state.images.slice(0,4).map(x=>x.edited?x.original:null),question:state.lastQuestion,followup:state.messages.filter(m=>m.role==="user").slice(-6).map(m=>m.text)}),signal:abort.signal});
   const payload=await res.json().catch(()=>({error:"AI接口没有返回JSON"}));
   if(!res.ok)throw Error(payload.error||"AI请求HTTP "+res.status);
   if(payload.mode!=="blind_review")throw Error("云函数尚未启用盲盒图片核对接口，需要同步更新 CloudBase 的 index.js");
@@ -281,8 +314,12 @@ function handleButton(e){
   check();return;
  }
  if(action==="add"){sync();state.rows.push(P().cleanRow());clearOutput();renderRows();return}
+ if(action==="camera"){cameraPhoto().catch(err=>status(err.message||String(err),true));return}
+ if(action==="paste-photo"){pastePhoto().catch(err=>status(err.message||String(err),true));return}
+ if(action==="edit-image"){editPhoto(Number(button.dataset.index)).catch(err=>status(err.message||String(err),true));return}
+ if(action==="restore-image"){restorePhoto(Number(button.dataset.index));return}
  if(action==="remove"){const i=Number(button.dataset.index);if(i>=0&&i<state.rows.length){state.rows.splice(i,1);clearOutput();renderRows();check()};return}
- if(action==="remove-image"){const i=Number(button.dataset.index);if(i>=0&&i<state.images.length){state.images.splice(i,1);render()};return}
+ if(action==="remove-image"){const i=Number(button.dataset.index);if(i>=0&&i<state.images.length){sync();state.images.splice(i,1);clearOutput();render()};return}
  if(action==="reply"){reply();return}
  if(action==="ask"){check();return}
  if(action==="allocate"){allocate();return}
