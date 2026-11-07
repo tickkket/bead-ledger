@@ -1,10 +1,10 @@
 /* Offline ledger PWA. App data stays in IndexedDB; updating the app shell does not erase records. */
 (()=>{
  "use strict";
- const BUILD=63;
+ const BUILD=64;
  let installPrompt=null,reloading=false,checking=false,registration=null,noticed=false;
  const isInstalled=()=>matchMedia("(display-mode:standalone)").matches||navigator.standalone===true;
- const isEditing=()=>!!document.querySelector("#editor,#bead-edit-shade,#bead-photo-overlay,#local-shade.open");
+ const isEditing=()=>!!document.querySelector("#editor,#bead-edit-shade,#bead-photo-overlay,#local-shade.open,#blind-ai-wizard:not([hidden])");
  function openFreshPage(){
   if(isEditing()){alert("请先保存或取消正在编辑的记录，再重新载入新版。旧库存数据不会被清除。");return false;}
   if(reloading)return true;
