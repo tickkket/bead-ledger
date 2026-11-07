@@ -1,4 +1,4 @@
-/* Optional AI-assisted purchase parsing. Completely idle until user configures a trusted EdgeOne endpoint. */
+/* Optional AI-assisted purchase parsing. Only calls model when user presses AI optimize. */
 (function(){
 "use strict";
 const daily=document.getElementById("local-daily");
@@ -46,8 +46,8 @@ $("ai-enhance-url").addEventListener("change",()=>{
  const value=$("ai-enhance-url").value.trim();
  try{if(value)localStorage.setItem(key,value);else localStorage.removeItem(key)}catch{}
 });
-$("ai-enhance-run").addEventListener("click",async()=>{
- const button=$("ai-enhance-run"),text=document.getElementById("daily-description")?.value?.trim()||"";
+run.addEventListener("click",async()=>{
+ const button=run,text=document.getElementById("daily-description")?.value?.trim()||"";
  if(!text)return show("请先说说这次买了什么。",true);
  const endpointText=$("ai-enhance-url").value.trim(),secret=$("ai-enhance-secret").value.trim();
  if(!endpointText||!secret){
