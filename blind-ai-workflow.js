@@ -6,19 +6,19 @@ const KEY="bead-ledger-blind-ai-workspace-v1",API_KEY="bead-ledger-ai-enhance-en
 const P=()=>window.BlindBoxPlanner;
 const escapeHTML=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const str=x=>String(x??"").trim();
-const fresh=()=>({total:"",description:"",markup:2.5,rows:[],messages:[],images:[],endpoint:"",token:"",output:"",plan:null,lastQuestion:"",busy:false});
+const fresh=()=>({total:"",description:"",markup:2.5,strandFactor:12,confirmed:false,rows:[],messages:[],images:[],endpoint:"",token:"",output:"",plan:null,lastQuestion:"",busy:false});
 let state=fresh(),overlay=null,lastFocus=null;
 function load(){
  try{
   const a=JSON.parse(localStorage.getItem(KEY)||"null");if(!a)return;
   state.total=str(a.total);state.description=str(a.description);
-  state.markup=Number(a.markup)||2.5;
+  state.markup=Number(a.markup)||2.5;state.strandFactor=Number(a.strandFactor)||12;
   state.rows=Array.isArray(a.rows)?a.rows.slice(0,60).map(P().cleanRow):[];
   state.output=str(a.output);
  }catch(e){console.warn("盲盒整理草稿读取失败",e)}
 }
 function persist(){
- try{localStorage.setItem(KEY,JSON.stringify({total:state.total,description:state.description,markup:state.markup,rows:state.rows,output:state.output}))}catch{}
+ try{localStorage.setItem(KEY,JSON.stringify({total:state.total,description:state.description,markup:state.markup,strandFactor:state.strandFactor,rows:state.rows,output:state.output}))}catch{}
 }
 function getURL(){try{return str(localStorage.getItem(API_KEY))}catch{return ""}}
 function el(id){return overlay?.querySelector("#"+id)||null}
@@ -34,6 +34,7 @@ function sync(){
  if(!overlay)return;
  state.total=str(el("baw-total")?.value);state.description=el("baw-description")?.value||"";
  state.markup=Number(el("baw-markup")?.value)||2.5;
+ state.strandFactor=Number(el("baw-strand-factor")?.value)||12;
  state.endpoint=str(el("baw-endpoint")?.value)||getURL();
  state.token=el("baw-token")?.value??state.token;
  try{
@@ -70,9 +71,9 @@ function createHost(){
  ".baw-row{border-bottom:1px solid #e8ece6;padding:10px 0}",
  ".baw-row:last-child{border-bottom:0}",
  ".baw-images{display:flex;flex-wrap:wrap;gap:8px}",
- ".baw-image{position:relative}",
- ".baw-image img{width:80px;height:80px;display:block;object-fit:cover;border-radius:9px}",
- ".baw-image button{position:absolute;right:0;top:0;border:0;background:#fff;border-radius:6px;cursor:pointer}",
+ ".baw-image{position:relative;width:125px;padding:5px;border:1px solid #e1e8df;border-radius:9px;background:#fff}",
+ ".baw-image img{width:100%;height:90px;display:block;object-fit:cover;border-radius:7px}",
+ ".baw-image button{border:1px solid #d6e0d5;background:#f7faf6;border-radius:6px;cursor:pointer;padding:5px;font-size:11px;color:#315e51}",".baw-image .baw-image-actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}",".baw-image small{display:block;line-height:1.5;color:#617265}",
  ".baw-chat{max-height:180px;overflow-y:auto;border:1px solid #dfe6df;background:#f5f8f5;padding:8px;border-radius:9px}",
  ".baw-msg{background:white;padding:9px;border-radius:7px;line-height:1.6;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0}",
  ".baw-msg.user{background:#e7f1e9}",
@@ -94,13 +95,15 @@ function createHost(){
 function render(){
  createHost();
  el("baw-content").innerHTML=[
- '<p class="baw-note">① 上传参考照片、填写整盒总价和各珠信息 → ② AI或本地核对并逐项补齐 → ③ 按可调整的品类权重分摊 → ④ 复制台账。<b>不会自动入库或修改旧账。</b></p>',
+ '<p class="baw-note">① 上传或拍摄照片、填写总价、品类、卡数、数量与形状 → ② AI或本地核对并逐项补齐 → ③ 按颗/整串及可调整的品类权重分摊 → ④ 复制台账。<b>不会自动入库或修改旧账。</b></p>',
  '<div class="baw-panel"><div class="baw-grid">',
  '<label class="baw-field">整套实付总价（元） <b style="color:#bc3939">*</b><input id="baw-total" class="baw-input" type="number" min="0" step=".01" value="'+escapeHTML(state.total)+'" placeholder="如58.80"></label>',
  '<label class="baw-field">建议售价倍率（可改）<input id="baw-markup" class="baw-input" type="number" min="1" max="20" step=".1" value="'+escapeHTML(state.markup)+'"></label>',
- '<label class="baw-field baw-wide">品类、卡数、数量、形状（每种一行，支持口语描述）<textarea id="baw-description" class="baw-text" placeholder="黄水晶｜17｜2｜圆珠&#10;黑发晶｜10｜1｜隔片">'+escapeHTML(state.description)+'</textarea></label>',
- '<label class="baw-field baw-wide">珠子照片（最多4张；仅点击 AI 核对时才上传）<input id="baw-pictures" type="file" class="baw-input" accept="image/*" multiple></label>',
- '<div class="baw-images baw-wide" id="baw-images">'+state.images.map((src,i)=>'<div class="baw-image"><img alt="第'+(i+1)+'张照片" src="'+escapeHTML(src)+'"><button type="button" data-baw="remove-image" data-index="'+i+'">×</button></div>').join("")+'</div>',
+ '<label class="baw-field baw-wide">整串折算系数（默认12，可改）<input id="baw-strand-factor" class="baw-input" type="number" min="1" max="200" step="1" value="'+escapeHTML(state.strandFactor)+'"><span class="baw-note">整串成本权重按约12颗普通珠折算，不代表市场行情。</span></label>',
+ '<label class="baw-field baw-wide">品类、卡数、数量、形状（支持“碎石手串2串”“圆珠手串22颗”）<textarea id="baw-description" class="baw-text" placeholder="黄水晶｜17｜2｜圆珠&#10;黑发晶｜10｜1｜隔片">'+escapeHTML(state.description)+'</textarea></label>',
+ '<label class="baw-field baw-wide">珠子照片（最多4张，可多选）<input id="baw-pictures" type="file" class="baw-input" accept="image/*" multiple></label>',
+ '<div class="baw-actions baw-wide" style="margin:0"><button type="button" class="baw-btn primary" data-baw="camera">📷 直接拍照</button><button type="button" class="baw-btn" data-baw="paste-photo">粘贴图片</button><span class="baw-note">拍照可缩放、尝试点按对焦；图片支持裁剪和调整，保留原图。</span></div>',
+ '<div class="baw-images baw-wide" id="baw-images">'+state.images.map((photo,i)=>'<div class="baw-image"><img alt="第'+(i+1)+'张照片" src="'+escapeHTML(photo.edited||photo.original)+'"><small>第'+(i+1)+'张 · '+escapeHTML(photo.source||"上传")+(photo.edited?" · 已编辑":" · 原图")+'</small><div class="baw-image-actions"><button type="button" data-baw="edit-image" data-index="'+i+'">编辑</button><button type="button" data-baw="restore-image" data-index="'+i+'" '+(!photo.edited?"disabled":"")+'>原图</button><button type="button" data-baw="remove-image" data-index="'+i+'">删除</button></div></div>').join("")+'</div>',
  '</div>',
  '<div class="baw-actions"><button type="button" class="baw-btn" data-baw="parse">整理描述并核对</button><button type="button" class="baw-btn primary" data-baw="ai">AI 核对图片与文字</button><button type="button" class="baw-btn" data-baw="add">＋ 添加一种</button></div>',
  '<details><summary class="baw-note">AI 接口设置（首次使用或重新打开后填口令）</summary><div class="baw-grid" style="margin-top:8px">',
@@ -111,7 +114,7 @@ function render(){
  '<div class="baw-panel"><b>补齐信息</b><div id="baw-chat" class="baw-chat"></div>',
  '<label class="baw-field" style="margin-top:9px">回复追问（如“第2种10卡、3颗、圆珠”）<textarea id="baw-reply" class="baw-text" placeholder="在这里补充信息，也可以直接修改上面对应的输入框"></textarea></label>',
  '<div class="baw-actions"><button class="baw-btn" type="button" data-baw="reply">提交补充并核对</button><button class="baw-btn" type="button" data-baw="ask">查看缺少项</button></div><div id="baw-status" aria-live="polite"></div></div>',
- '<div class="baw-panel"><div class="baw-actions"><button type="button" data-baw="allocate" class="baw-btn primary">信息齐全，生成成本台账</button><button type="button" data-baw="copy" class="baw-btn">复制台账</button><button type="button" data-baw="clear" class="baw-btn danger">清空本次草稿</button></div><div id="baw-output"></div></div>'
+ '<div class="baw-panel"><label class="baw-note" style="display:block;margin-bottom:10px"><input id="baw-confirm" type="checkbox" '+(state.confirmed?"checked":"")+'> 我已核对每种珠子的品类、卡数、数量、形状、计量单位及权重</label><div class="baw-actions"><button type="button" data-baw="allocate" class="baw-btn primary">确认后生成成本台账</button><button type="button" data-baw="copy" class="baw-btn">复制台账</button><button type="button" data-baw="clear" class="baw-btn danger">清空本次草稿</button></div><div id="baw-output"></div></div>'
  ].join("");
  renderRows();renderChat();if(state.output)renderOutput();
 }
@@ -121,9 +124,11 @@ function renderRows(){
  box.innerHTML=state.rows.map((r,i)=>{
   const input=(label,key,placeholder,type="text")=>'<label class="baw-field">'+label+'<input class="baw-input" type="'+type+'" data-baw-field="'+key+'" value="'+escapeHTML(r[key])+'" placeholder="'+escapeHTML(placeholder)+'"></label>';
   const select='<label class="baw-field">珠子大类<select class="baw-select" data-baw-field="group">'+P().FAMILIES.map(g=>'<option value="'+escapeHTML(g)+'" '+(g===r.group?'selected':'')+'>'+escapeHTML(g)+'</option>').join("")+'</select></label>';
+  const unit='<label class="baw-field">计量单位 *<select class="baw-select" data-baw-field="unit"><option value="颗" '+(r.unit!=="串"?"selected":"")+'>颗（按单颗）</option><option value="串" '+(r.unit==="串"?"selected":"")+'>串（按整串）</option></select></label>';
+  const kind='<label class="baw-field">来源类型<select class="baw-select" data-baw-field="kind"><option value="散珠" '+(r.kind!=="手串"?"selected":"")+'>散珠</option><option value="手串" '+(r.kind==="手串"?"selected":"")+'>手串</option></select></label>';
   return '<div class="baw-row" data-baw-row="'+i+'"><div class="baw-actions" style="justify-content:space-between"><b>第 '+(i+1)+' 种</b><button type="button" class="baw-btn danger" data-baw="remove" data-index="'+i+'">删除</button></div><div class="baw-grid">'+
-   input("珠子品类 *","name","如黄水晶")+input("卡数 *","card","没有卡数填不适用")+
-   input("数量（颗） *","qty","如2","number")+input("形状 / 珠型 *","shape","如隔片、圆珠")+
+   input("珠子品类 *","name","如黄水晶")+input("卡数（碎石/直切整串可不适用）","card","如8、或不适用")+
+   input("数量 *","qty","如2","number")+unit+input("形状 / 珠型 *","shape","如圆珠、碎石、直切")+kind+
    select+input("品类权重（可选）","weight","默认"+(P().WEIGHTS[r.group]??1),"number")+
    '<div class="baw-wide">'+input("备注（可选）","notes","可记品相、棉裂、款式")+'</div></div></div>';
  }).join("");
