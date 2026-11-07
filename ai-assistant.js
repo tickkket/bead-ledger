@@ -223,12 +223,16 @@ function quickPreview(){
  const p=parseQuick($("local-desc").value);meta.quick=p;
  let box=$("quick-box");if(!box){box=document.createElement("section");box.id="quick-box";box.className="local-help";box.style.cssText="padding:12px;border:1px solid #dce5dc;background:#fff;border-radius:11px;margin:10px 0";$("local-desc").after(box);}
  box.innerHTML='<strong>快速入库确认</strong><div style="margin:10px 0">品类：'+E(p.category)+' · '+E(p.size||"规格未填")+' · '+E(p.length||"串长未填")+'<br>购入：'+p.strandCount+'串，实付 ¥'+p.total.toFixed(2)+'；'+(p.count?'约 '+p.count+' 颗':'未提供颗数')+'</div>'+
+ '<label>珠子大类 <span class="required-star">*</span></label><select id="quick-bead-group" class="local-field">'+STONE_CLASS_NAMES.map(g=>'<option value="'+E(g)+'" '+(g===inferStoneClass(p.category)?'selected':'')+'>'+E(g)+'</option>').join('')+'</select>'+
+ '<div id="quick-hardness-wrap" style="display:'+(isHardnessGroup(inferStoneClass(p.category))?'':'none')+'"><label>硬度区分 <span class="required-star">*</span></label><select id="quick-hardness" class="local-field">'+HARDNESS_OPTIONS.map(([v,l])=>'<option value="'+E(v)+'">'+E(l)+'</option>').join('')+'</select></div>'+
  '<label>库存记账单位</label><select id="quick-unit" class="local-field"><option value="beads" '+(p.count?'selected':'')+'>按颗（估算颗数）</option><option value="strands" '+(!p.count?'selected':'')+'>按串（一串记为1个库存单位）</option></select>'+
  '<label>实际录入数量（可核对修改）</label><input id="quick-qty" class="local-field" type="number" min="1" step="1" value="'+(p.count||p.strandCount)+'">'+
  '<label>本批实付总价（元）</label><input id="quick-total" class="local-field" type="number" min="0" step="any" value="'+p.total+'">'+
- '<label>使用状态（必选）</label><select id="quick-usage-status" class="local-field"><option value="">请选择使用状态</option>'+['未用','已用','已卖','自戴'].map(s=>'<option value="'+s+'" '+((window.BeadUsageStatusFromText?.(p.raw)||'')===s?'selected':'')+'>'+s+'</option>').join('')+'</select>'+ 
- '<label>购买渠道 *</label><select id="quick-source-channel" class="local-field">'+purchaseSourceOptions(splitPurchaseSource(p.source).channel)+'</select><input id="quick-source-detail" class="local-field" placeholder="补充店铺或直播间" value="'+E(splitPurchaseSource(p.source).detail)+'">'+
+ '<label>使用状态 <span class="required-star">*</span></label><select id="quick-usage-status" class="local-field"><option value="">请选择使用状态</option>'+['未用','已用','已卖','自戴'].map(s=>'<option value="'+s+'" '+((window.BeadUsageStatusFromText?.(p.raw)||'')===s?'selected':'')+'>'+s+'</option>').join('')+'</select>'+ 
+ '<label>购买渠道 <span class="required-star">*</span></label><select id="quick-source-channel" class="local-field">'+purchaseSourceOptions(splitPurchaseSource(p.source).channel)+'</select><input id="quick-source-detail" class="local-field" placeholder="补充店铺或直播间" value="'+E(splitPurchaseSource(p.source).detail)+'">'+
  '<div id="quick-cost" class="local-result"></div><button class="local-btn main" data-local="quick-save">确认并保存到物料库存</button>';
+ const family=$("quick-bead-group"),hardBox=$("quick-hardness-wrap"),hard=$("quick-hardness");
+ family.onchange=()=>{hardBox.style.display=isHardnessGroup(family.value)?'':'none';if(!isHardnessGroup(family.value))hard.value='';};
  const select=$("quick-unit"),qty=$("quick-qty"),price=$("quick-total");
  const update=()=>{const val=select.value==="beads"?(p.count||1):p.strandCount;qty.value=val;refreshQuickCost()};
  select.onchange=update;qty.oninput=refreshQuickCost;price.oninput=refreshQuickCost;refreshQuickCost();
@@ -246,9 +250,12 @@ async function saveQuick(){
  if(!Number.isFinite(total)||total<0||!Number.isFinite(total))throw Error("请填写正确实付总价");
  if(mode!=="beads"&&mode!=="strands")throw Error("请选库存单位");
  const unit=mode==="beads"?"颗":"串";
+ const beadGroup=$("quick-bead-group")?.value||inferStoneClass(p.category);
+ const hardness=$("quick-hardness")?.value||"";
+ if(isHardnessGroup(beadGroup)&&!HARDNESS_VALUES.has(hardness))throw Error("请选择高硬度或低硬度");
  const usageStatus=$("quick-usage-status")?.value;if(!["未用","已用","已卖","自戴"].includes(usageStatus))throw Error("请选择使用状态");
  const notes=[p.strandCount+"串半成品珠串",p.length?"串长 "+p.length:"",p.size?"珠径 "+p.size:"",p.count?"口述约 "+p.count+"颗":"",p.approx?"颗数估算，未逐颗清点":"",p.raw].filter(Boolean).join("；");
- const data={id:uid(),kind:"bead",usageStatus,name:p.category+"半成品珠串",beadGroup:inferStoneClass(p.category),subtype:p.category,shape:p.shape||"",spec:[p.size,p.length].filter(Boolean).join(" · "),weight:0,grade:"普通",flaw:"",qty,initialQty:qty,unit,unitCost:round(total/qty,8),totalPurchaseCost:total,qtyApprox:mode==="beads"&&p.approx,approxBeadCount:p.count||null,strandLengthCm:p.length?Number(p.length.replace("cm","")):null,strandCount:p.strandCount,purchaseDate:today(),source:makePurchaseSource($("quick-source-channel").value,$("quick-source-detail").value),notes,image:"",createdAt:new Date().toISOString(),isWelfare:false};
+ const data={id:uid(),kind:"bead",usageStatus,name:p.category+"半成品珠串",beadGroup,hardness:isHardnessGroup(beadGroup)?hardness:"",subtype:p.category,shape:p.shape||"",spec:[p.size,p.length].filter(Boolean).join(" · "),weight:0,grade:"普通",flaw:"",qty,initialQty:qty,unit,unitCost:round(total/qty,8),totalPurchaseCost:total,qtyApprox:mode==="beads"&&p.approx,approxBeadCount:p.count||null,strandLengthCm:p.length?Number(p.length.replace("cm","")):null,strandCount:p.strandCount,purchaseDate:today(),source:makePurchaseSource($("quick-source-channel").value,$("quick-source-detail").value),notes,image:"",createdAt:new Date().toISOString(),isWelfare:false};
  if(!confirm("确定以 "+qty+unit+" 入库「"+data.name+"」？本批实付 ¥"+total.toFixed(2)+"，单位成本约 ¥"+(total/qty).toFixed(4)+"。"+(data.qtyApprox?"\n⚠ 颗数为估算，建议清点后盘点调整。":"")))return;
  await commit(()=>{state.materials.push(data);usageAdd([data])},"已快速入库："+qty+unit+" "+data.name);
  shade.classList.remove("open");

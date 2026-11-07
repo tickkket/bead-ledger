@@ -37,7 +37,9 @@ for(const group of GROUPS)for(const [type,words] of group.types){
 }
 ALIASES.sort((a,b)=>b.synonym.length-a.synonym.length||b.type.length-a.type.length);
 const materialWords=/不锈钢|合金|金属|黄铜|铜制|银色|金色|玫瑰金|镀金|镀银|14k|18k|925银|钢色|钛钢/i;
-const gemstoneWords=/天然石|晶石|水晶|白水晶|紫水晶|黄水晶|粉水晶|珍珠|翡翠|和田玉|玛瑙|玉髓|萤石|碧玺|绿松石|青金石|拉长石|月光石|菩提|木珠|水晶珠|石榴石|海蓝宝/;
+const gemstoneWords=/天然石|晶石|水晶|珍珠|翡翠|和田玉|玛瑙|玉髓|萤石|碧玺|绿松石|青金石|拉长石|月光石|菩提|木珠|禾木|琉璃|玻璃|贝母|贝壳|砗磲|陶瓷|树脂|石榴石|海蓝宝/;
+const explicitMetalMaterial=/金属|金属配件|五金|合金|黄铜|铜制|不锈钢|钛钢|925银|纯银|镀金|镀银|14K|18K/i;
+const separatorTypes=new Set(['隔珠','隔片','隔圈','带吊隔片','四通隔珠','四通','单通','多通','通孔隔圈']);
 const supplyWords=/弹力线|水晶线|鱼线|铜丝|钢丝|包装袋|礼盒|绒布袋|胶水|耗材|工具/;
 // Preserve the complete spoken product name (including style/pattern prefix).
 // The taxonomy's standard accessory type remains a separate field.
@@ -75,6 +77,14 @@ function detect(input){
  const matched=ALIASES.find(x=>text.toLowerCase().includes(x.synonym.toLowerCase()));
  if(!matched){return /金属配件|五金配件|饰品金属配件/.test(text)?{kind:'metal',group:'',type:'',name:'金属配件',matched:''}:null}
  const explicitMetal=materialWords.test(text)||/(?:配件|连接件|五金|镀层)/.test(text);
+ // “隔珠/隔片” describes a shape, not proof of metal. Prefer bead or ask
+ // the user when the material is unspecified. Color alone (金色/银色) is not metal evidence.
+ if(separatorTypes.has(matched.type)){
+  const markedMetal=explicitMetalMaterial.test(text)||/(?:金属|五金|连接|配件)/.test(text);
+  if(!markedMetal)return null;
+  if(gemstoneWords.test(text)&&!explicitMetalMaterial.test(text))return null;
+ }
+ if(window.BeadMaterialClassifier?.beadSeparatorName(text)&&!explicitMetalMaterial.test(text))return null;
  // Natural-stone bead shapes can overlap with metal separators and curved tubes.
  if(gemstoneWords.test(text)&&!explicitMetal){
   if(["弯管","隔片","隔珠","隔圈","通孔隔圈","项链"].includes(matched.type))return null;

@@ -19,7 +19,8 @@ function welfareRow(m={},index=0){
  '<div class="form-grid">'+
  field('w-name','名称',m.name||'',{required:true})+
  sel('w-status','使用状态（必选）',m.usageStatus||'',usageStatusOptions())+
- sel('w-group','散珠分类',group,groupOpts)+
+ sel('w-group','珠子大类',group,groupOpts)+
+ hardnessSelect('w-hardness',m.hardness||'',group)+
  beadCategoryField('w-subtype','珠子品类',m.subtype||'',group)+
  field('w-shape','形状 / 珠型',m.shape||'')+
  field('w-spec','卡数 / 尺寸规格',m.spec||'')+
@@ -29,7 +30,7 @@ function welfareRow(m={},index=0){
 function welfareRows(){
  return Array.from(document.querySelectorAll('#blind-welfare-rows [data-blind-welfare-row]')).map((r,i)=>({
   existingId:v(r,'w-existing-id'),name:v(r,'w-name'),usageStatus:v(r,'w-status'),
-  beadGroup:v(r,'w-group'),subtype:v(r,'w-subtype'),shape:v(r,'w-shape'),
+  beadGroup:v(r,'w-group'),hardness:v(r,'w-hardness'),subtype:v(r,'w-subtype'),shape:v(r,'w-shape'),
   spec:v(r,'w-spec'),qtyText:inputVal(r,'w-qty'),image:ui.images['welfare-'+i]||''
  }));
 }
@@ -110,12 +111,14 @@ function planEdit(id,meta,premiumRows,welfareData){
   required(r.name&&r.subtype,'第 '+(i+1)+' 颗优选珠缺少名称或品类');
   required(USAGE_STATUSES.includes(r.usageStatus),'第 '+(i+1)+' 颗优选珠请选择使用状态');
   required(STONE_CLASS_NAMES.includes(r.beadGroup),'第 '+(i+1)+' 颗优选珠分类无效');
+  required(!isHardnessGroup(r.beadGroup)||HARDNESS_VALUES.has(r.hardness),'第 '+(i+1)+' 颗优选珠请选择高硬度或低硬度');
   fetchOld(r,false);
  }
  const welfareSpecs=welfareData.map((r,i)=>{
   required(r.name&&r.subtype,'第 '+(i+1)+' 组福利珠缺少名称或品类');
   required(USAGE_STATUSES.includes(r.usageStatus),'第 '+(i+1)+' 组福利珠请选择使用状态');
   required(STONE_CLASS_NAMES.includes(r.beadGroup),'第 '+(i+1)+' 组福利珠分类无效');
+  required(!isHardnessGroup(r.beadGroup)||HARDNESS_VALUES.has(r.hardness),'第 '+(i+1)+' 组福利珠请选择高硬度或低硬度');
   const amount=Number(r.qtyText);
   required(r.qtyText!==''&&Number.isInteger(amount)&&amount>0&&amount<=1000000,'第 '+(i+1)+' 组福利珠数量错误');
   const old=fetchOld(r,true);
@@ -147,7 +150,7 @@ function planEdit(id,meta,premiumRows,welfareData){
   const old=r.existingId?byId(state.materials,r.existingId):null;
   return {...old,id:old?.id||uid(),kind:'bead',batchId:batch.id,isWelfare:false,
    purchaseType:'loose',name:r.name,usageStatus:r.usageStatus,beadGroup:ensureStoneClass(r.beadGroup,r.subtype),
-   subtype:r.subtype,shape:r.shape||'',spec:r.spec||'',weight:n(r.weight),grade:r.grade||'普通',
+   subtype:r.subtype,hardness:isHardnessGroup(r.beadGroup)?r.hardness:'',shape:r.shape||'',spec:r.spec||'',weight:n(r.weight),grade:r.grade||'普通',
    flaw:r.flaw||'',stallRange:r.stallRange||'',looseMarketPrice:r.looseMarketPrice||'',costHint:r.costHint||'',
    qty:old?n(old.qty):1,initialQty:old?n(old.initialQty??1):1,unit:'颗',unitCost:allocations[i]/100,
    image:r.image||'',source:meta.source,purchaseDate:meta.date,notes:old?.notes===batch.notes?meta.notes:(old?.notes||meta.notes),
@@ -159,7 +162,7 @@ function planEdit(id,meta,premiumRows,welfareData){
   const oldAutomatic='盲盒余珠，未分配独立成本。'+(batch.notes||'');
   return {...old,id:old?.id||uid(),kind:'bead',batchId:batch.id,isWelfare:true,
    purchaseType:'loose',name:r.name,usageStatus:r.usageStatus,beadGroup:ensureStoneClass(r.beadGroup,r.subtype),
-   subtype:r.subtype,shape:r.shape||'',spec:r.spec||'',qty:remaining,initialQty:r.amount,
+   subtype:r.subtype,hardness:isHardnessGroup(r.beadGroup)?r.hardness:'',shape:r.shape||'',spec:r.spec||'',qty:remaining,initialQty:r.amount,
    unit:'颗',unitCost:0,image:r.image||'',source:meta.source,purchaseDate:meta.date,
    notes:old?.notes&&old.notes!==oldAutomatic?old.notes:'盲盒余珠，未分配独立成本。'+meta.notes,
    grade:old?.grade||'普通',flaw:old?.flaw||'',weight:old?.weight||0,
@@ -195,7 +198,7 @@ document.addEventListener('click',event=>{
  if(!editing())return;
  if(event.target.closest('[data-welfare-add]')){
   event.preventDefault();
-  rebuildWelfare([...welfareRows(),{name:'',subtype:'',beadGroup:'待确认品类',usageStatus:'',qtyText:'1',image:''}]);
+  rebuildWelfare([...welfareRows(),{name:'',subtype:'',beadGroup:'待确认品类',hardness:'',usageStatus:'',qtyText:'1',image:''}]);
   return;
  }
  const remove=event.target.closest('[data-welfare-remove]');
@@ -205,7 +208,9 @@ document.addEventListener('input',event=>{
  if(editing()&&event.target?.matches('#blind-welfare-rows [name="w-qty"]'))refresh();
 });
 document.addEventListener('change',event=>{
- if(editing()&&event.target?.matches('#blind-welfare-rows [name="w-qty"]'))refresh();
+ if(!editing())return;
+ if(event.target?.matches('#blind-welfare-rows [name="w-qty"]'))refresh();
+ if(event.target?.matches('#blind-welfare-rows [name="w-group"]'))updateHardnessSelect(event.target.closest('[data-blind-welfare-row]'));
 });
 window.BlindEdit={open,save,refresh,planEdit,editing};
 })();
