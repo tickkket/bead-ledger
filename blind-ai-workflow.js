@@ -6,19 +6,19 @@ const KEY="bead-ledger-blind-ai-workspace-v1",API_KEY="bead-ledger-ai-enhance-en
 const P=()=>window.BlindBoxPlanner;
 const escapeHTML=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const str=x=>String(x??"").trim();
-const fresh=()=>({total:"",description:"",markup:2.5,rows:[],messages:[],images:[],endpoint:"",token:"",output:"",plan:null,lastQuestion:"",busy:false});
+const fresh=()=>({total:"",description:"",markup:2.5,strandFactor:12,confirmed:false,rows:[],messages:[],images:[],endpoint:"",token:"",output:"",plan:null,lastQuestion:"",busy:false});
 let state=fresh(),overlay=null,lastFocus=null;
 function load(){
  try{
   const a=JSON.parse(localStorage.getItem(KEY)||"null");if(!a)return;
   state.total=str(a.total);state.description=str(a.description);
-  state.markup=Number(a.markup)||2.5;
+  state.markup=Number(a.markup)||2.5;state.strandFactor=Number(a.strandFactor)||12;
   state.rows=Array.isArray(a.rows)?a.rows.slice(0,60).map(P().cleanRow):[];
   state.output=str(a.output);
  }catch(e){console.warn("盲盒整理草稿读取失败",e)}
 }
 function persist(){
- try{localStorage.setItem(KEY,JSON.stringify({total:state.total,description:state.description,markup:state.markup,rows:state.rows,output:state.output}))}catch{}
+ try{localStorage.setItem(KEY,JSON.stringify({total:state.total,description:state.description,markup:state.markup,strandFactor:state.strandFactor,rows:state.rows,output:state.output}))}catch{}
 }
 function getURL(){try{return str(localStorage.getItem(API_KEY))}catch{return ""}}
 function el(id){return overlay?.querySelector("#"+id)||null}
@@ -34,6 +34,7 @@ function sync(){
  if(!overlay)return;
  state.total=str(el("baw-total")?.value);state.description=el("baw-description")?.value||"";
  state.markup=Number(el("baw-markup")?.value)||2.5;
+ state.strandFactor=Number(el("baw-strand-factor")?.value)||12;
  state.endpoint=str(el("baw-endpoint")?.value)||getURL();
  state.token=el("baw-token")?.value??state.token;
  try{
@@ -70,9 +71,9 @@ function createHost(){
  ".baw-row{border-bottom:1px solid #e8ece6;padding:10px 0}",
  ".baw-row:last-child{border-bottom:0}",
  ".baw-images{display:flex;flex-wrap:wrap;gap:8px}",
- ".baw-image{position:relative}",
- ".baw-image img{width:80px;height:80px;display:block;object-fit:cover;border-radius:9px}",
- ".baw-image button{position:absolute;right:0;top:0;border:0;background:#fff;border-radius:6px;cursor:pointer}",
+ ".baw-image{position:relative;width:125px;padding:5px;border:1px solid #e1e8df;border-radius:9px;background:#fff}",
+ ".baw-image img{width:100%;height:90px;display:block;object-fit:cover;border-radius:7px}",
+ ".baw-image button{border:1px solid #d6e0d5;background:#f7faf6;border-radius:6px;cursor:pointer;padding:5px;font-size:11px;color:#315e51}",".baw-image .baw-image-actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}",".baw-image small{display:block;line-height:1.5;color:#617265}",
  ".baw-chat{max-height:180px;overflow-y:auto;border:1px solid #dfe6df;background:#f5f8f5;padding:8px;border-radius:9px}",
  ".baw-msg{background:white;padding:9px;border-radius:7px;line-height:1.6;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0}",
  ".baw-msg.user{background:#e7f1e9}",
@@ -94,13 +95,15 @@ function createHost(){
 function render(){
  createHost();
  el("baw-content").innerHTML=[
- '<p class="baw-note">① 上传参考照片、填写整盒总价和各珠信息 → ② AI或本地核对并逐项补齐 → ③ 按可调整的品类权重分摊 → ④ 复制台账。<b>不会自动入库或修改旧账。</b></p>',
+ '<p class="baw-note">① 上传或拍摄照片、填写总价、品类、卡数、数量与形状 → ② AI或本地核对并逐项补齐 → ③ 按颗/整串及可调整的品类权重分摊 → ④ 复制台账。<b>不会自动入库或修改旧账。</b></p>',
  '<div class="baw-panel"><div class="baw-grid">',
  '<label class="baw-field">整套实付总价（元） <b style="color:#bc3939">*</b><input id="baw-total" class="baw-input" type="number" min="0" step=".01" value="'+escapeHTML(state.total)+'" placeholder="如58.80"></label>',
  '<label class="baw-field">建议售价倍率（可改）<input id="baw-markup" class="baw-input" type="number" min="1" max="20" step=".1" value="'+escapeHTML(state.markup)+'"></label>',
- '<label class="baw-field baw-wide">品类、卡数、数量、形状（每种一行，支持口语描述）<textarea id="baw-description" class="baw-text" placeholder="黄水晶｜17｜2｜圆珠&#10;黑发晶｜10｜1｜隔片">'+escapeHTML(state.description)+'</textarea></label>',
- '<label class="baw-field baw-wide">珠子照片（最多4张；仅点击 AI 核对时才上传）<input id="baw-pictures" type="file" class="baw-input" accept="image/*" multiple></label>',
- '<div class="baw-images baw-wide" id="baw-images">'+state.images.map((src,i)=>'<div class="baw-image"><img alt="第'+(i+1)+'张照片" src="'+escapeHTML(src)+'"><button type="button" data-baw="remove-image" data-index="'+i+'">×</button></div>').join("")+'</div>',
+ '<label class="baw-field baw-wide">整串折算系数（默认12，可改）<input id="baw-strand-factor" class="baw-input" type="number" min="1" max="200" step="1" value="'+escapeHTML(state.strandFactor)+'"><span class="baw-note">整串成本权重按约12颗普通珠折算，不代表市场行情。</span></label>',
+ '<label class="baw-field baw-wide">品类、卡数、数量、形状（支持“碎石手串2串”“圆珠手串22颗”）<textarea id="baw-description" class="baw-text" placeholder="黄水晶｜17｜2｜圆珠&#10;黑发晶｜10｜1｜隔片">'+escapeHTML(state.description)+'</textarea></label>',
+ '<label class="baw-field baw-wide">珠子照片（最多4张，可多选）<input id="baw-pictures" type="file" class="baw-input" accept="image/*" multiple></label>',
+ '<div class="baw-actions baw-wide" style="margin:0"><button type="button" class="baw-btn primary" data-baw="camera">📷 直接拍照</button><button type="button" class="baw-btn" data-baw="paste-photo">粘贴图片</button><span class="baw-note">拍照可缩放、尝试点按对焦；图片支持裁剪和调整，保留原图。</span></div>',
+ '<div class="baw-images baw-wide" id="baw-images">'+state.images.map((photo,i)=>'<div class="baw-image"><img alt="第'+(i+1)+'张照片" src="'+escapeHTML(photo.edited||photo.original)+'"><small>第'+(i+1)+'张 · '+escapeHTML(photo.source||"上传")+(photo.edited?" · 已编辑":" · 原图")+'</small><div class="baw-image-actions"><button type="button" data-baw="edit-image" data-index="'+i+'">编辑</button><button type="button" data-baw="restore-image" data-index="'+i+'" '+(!photo.edited?"disabled":"")+'>原图</button><button type="button" data-baw="remove-image" data-index="'+i+'">删除</button></div></div>').join("")+'</div>',
  '</div>',
  '<div class="baw-actions"><button type="button" class="baw-btn" data-baw="parse">整理描述并核对</button><button type="button" class="baw-btn primary" data-baw="ai">AI 核对图片与文字</button><button type="button" class="baw-btn" data-baw="add">＋ 添加一种</button></div>',
  '<details><summary class="baw-note">AI 接口设置（首次使用或重新打开后填口令）</summary><div class="baw-grid" style="margin-top:8px">',
@@ -111,7 +114,7 @@ function render(){
  '<div class="baw-panel"><b>补齐信息</b><div id="baw-chat" class="baw-chat"></div>',
  '<label class="baw-field" style="margin-top:9px">回复追问（如“第2种10卡、3颗、圆珠”）<textarea id="baw-reply" class="baw-text" placeholder="在这里补充信息，也可以直接修改上面对应的输入框"></textarea></label>',
  '<div class="baw-actions"><button class="baw-btn" type="button" data-baw="reply">提交补充并核对</button><button class="baw-btn" type="button" data-baw="ask">查看缺少项</button></div><div id="baw-status" aria-live="polite"></div></div>',
- '<div class="baw-panel"><div class="baw-actions"><button type="button" data-baw="allocate" class="baw-btn primary">信息齐全，生成成本台账</button><button type="button" data-baw="copy" class="baw-btn">复制台账</button><button type="button" data-baw="clear" class="baw-btn danger">清空本次草稿</button></div><div id="baw-output"></div></div>'
+ '<div class="baw-panel"><label class="baw-note" style="display:block;margin-bottom:10px"><input id="baw-confirm" type="checkbox" '+(state.confirmed?"checked":"")+'> 我已核对每种珠子的品类、卡数、数量、形状、计量单位及权重</label><div class="baw-actions"><button type="button" data-baw="allocate" class="baw-btn primary">确认后生成成本台账</button><button type="button" data-baw="copy" class="baw-btn">复制台账</button><button type="button" data-baw="clear" class="baw-btn danger">清空本次草稿</button></div><div id="baw-output"></div></div>'
  ].join("");
  renderRows();renderChat();if(state.output)renderOutput();
 }
@@ -121,9 +124,11 @@ function renderRows(){
  box.innerHTML=state.rows.map((r,i)=>{
   const input=(label,key,placeholder,type="text")=>'<label class="baw-field">'+label+'<input class="baw-input" type="'+type+'" data-baw-field="'+key+'" value="'+escapeHTML(r[key])+'" placeholder="'+escapeHTML(placeholder)+'"></label>';
   const select='<label class="baw-field">珠子大类<select class="baw-select" data-baw-field="group">'+P().FAMILIES.map(g=>'<option value="'+escapeHTML(g)+'" '+(g===r.group?'selected':'')+'>'+escapeHTML(g)+'</option>').join("")+'</select></label>';
+  const unit='<label class="baw-field">计量单位 *<select class="baw-select" data-baw-field="unit"><option value="颗" '+(r.unit!=="串"?"selected":"")+'>颗（按单颗）</option><option value="串" '+(r.unit==="串"?"selected":"")+'>串（按整串）</option></select></label>';
+  const kind='<label class="baw-field">来源类型<select class="baw-select" data-baw-field="kind"><option value="散珠" '+(r.kind!=="手串"?"selected":"")+'>散珠</option><option value="手串" '+(r.kind==="手串"?"selected":"")+'>手串</option></select></label>';
   return '<div class="baw-row" data-baw-row="'+i+'"><div class="baw-actions" style="justify-content:space-between"><b>第 '+(i+1)+' 种</b><button type="button" class="baw-btn danger" data-baw="remove" data-index="'+i+'">删除</button></div><div class="baw-grid">'+
-   input("珠子品类 *","name","如黄水晶")+input("卡数 *","card","没有卡数填不适用")+
-   input("数量（颗） *","qty","如2","number")+input("形状 / 珠型 *","shape","如隔片、圆珠")+
+   input("珠子品类 *","name","如黄水晶")+input("卡数（碎石/直切整串可不适用）","card","如8、或不适用")+
+   input("数量 *","qty","如2","number")+unit+input("形状 / 珠型 *","shape","如圆珠、碎石、直切")+kind+
    select+input("品类权重（可选）","weight","默认"+(P().WEIGHTS[r.group]??1),"number")+
    '<div class="baw-wide">'+input("备注（可选）","notes","可记品相、棉裂、款式")+'</div></div></div>';
  }).join("");
@@ -149,7 +154,7 @@ function check(){
   status("信息未齐全，暂时不能分摊。",true);
  }else{
   state.lastQuestion="";
-  addMessage("信息齐全：共 "+state.rows.length+" 种、"+state.rows.reduce((n,x)=>n+Number(x.qty),0)+" 颗。请确认各品类权重，然后生成台账。");
+  addMessage("信息齐全：共 "+state.rows.length+" 种、"+state.rows.filter(x=>x.unit!=="串").reduce((n,x)=>n+Number(x.qty),0)+" 颗与 "+state.rows.filter(x=>x.unit==="串").reduce((n,x)=>n+Number(x.qty),0)+" 串。请核对权重并勾选确认。");
   status("可以进行成本分摊。");
  }
  return questions;
@@ -157,8 +162,8 @@ function check(){
 function mergeLines(input){
  const incoming=P().parseLines(input);
  for(const r of incoming){
-  const found=state.rows.find(x=>x.name&&r.name===x.name);
-  if(found){for(const key of ["card","qty","shape","name"])if(!found[key]&&r[key])found[key]=r[key]}
+  const found=state.rows.find(x=>x.name&&r.name===x.name&&x.unit===r.unit&&(!r.card||!x.card||r.card===x.card)&&(!r.shape||!x.shape||r.shape===x.shape));
+  if(found){for(const key of ["card","qty","shape","name","kind","unit"])if(!found[key]&&r[key])found[key]=r[key]}
   else state.rows.push(r);
  }
  return incoming.length;
@@ -166,57 +171,109 @@ function mergeLines(input){
 function reply(){
  const t=str(el("baw-reply")?.value);if(!t){status("请先输入补充信息。",true);return}
  addMessage(t,"user");
- const x=t.match(/第\s*(\d+)\s*(?:种|个|条|行)/);
- const target=x?state.rows[Number(x[1])-1]:state.rows.length===1?state.rows[0]:null;
- if(target){
-  const card=t.match(/(?:卡数|卡)\s*(?:是|为|[:：])?\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*卡/);
-  const qty=t.match(/(\d+)\s*(?:颗|粒|个)/),shape=P().shapeFor(t);
+ const parts=t.split(/[；;]+|(?=第\s*\d+\s*(?:种|个|条|行))/).map(str).filter(Boolean);
+ for(const part of parts){
+  const x=part.match(/第\s*(\d+)\s*(?:种|个|条|行)/);
+  const target=x?state.rows[Number(x[1])-1]:state.rows.length===1?state.rows[0]:null;
+  if(!target){mergeLines(part);continue}
+  const card=part.match(/(?:卡数|卡)\s*(?:是|为|[:：])?\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*卡/);
+  const qty=part.match(/(\d+)\s*(颗|粒|个|串)/),shape=P().shapeFor(part);
   if(card)target.card=card[1]||card[2];
-  if(/没有卡数|卡数不适用/.test(t))target.card="不适用";
-  if(qty)target.qty=qty[1];if(shape)target.shape=shape;
+  if(/没有卡数|无卡数|卡数不适用/.test(part))target.card="不适用";
+  if(qty){target.qty=qty[1];target.unit=qty[2]==="串"?"串":"颗";if(target.unit==="串")target.kind="手串";}
+  if(shape)target.shape=shape;
+  if(/手串/.test(part))target.kind="手串";
   if(!target.name){
-   const n=t.replace(/第\s*\d+\s*(?:种|条|行|个)/g,"").replace(/卡数?|数量|形状|是|为|\d+(?:\.\d+)?|颗|粒|，|,|。|:|：/g,"").trim();
+   const n=part.replace(/第\s*\d+\s*(?:种|条|行|个)/g,"").replace(/卡数?|数量|形状|是|为|\d+(?:\.\d+)?|颗|粒|串|，|,|。|:|：/g,"").trim();
    if(n&&!P().SHAPES.includes(n))target.name=n.slice(0,80);
   }
- }else mergeLines(t);
+ }
  el("baw-reply").value="";
  clearOutput();renderRows();check();
 }
-function clearOutput(){state.output="";state.plan=null;if(el("baw-output"))el("baw-output").innerHTML="";persist()}
+function clearOutput(){state.output="";state.plan=null;state.confirmed=false;const box=el("baw-confirm");if(box)box.checked=false;if(el("baw-output"))el("baw-output").innerHTML="";persist()}
 function allocate(){
  sync();
  if(P().questions(state.rows,state.total).length){check();return}
+ if(!state.confirmed){status("请先核对明细，并勾选台账生成按钮上方的确认框。",true);return}
  try{
-  const plan=P().allocate(state.total,state.rows,state.markup);
+  const plan=P().allocate(state.total,state.rows,state.markup,state.strandFactor);
   state.plan=plan;state.output=P().toTSV(plan);persist();renderOutput();
-  addMessage("分摊完成："+plan.groups+"种、"+plan.qty+"颗。总成本 ¥"+(plan.cents/100).toFixed(2)+"，与整套实付一致。建议售价按成本的 "+state.markup+" 倍试算，可以自行调整。");
+  addMessage("分摊完成："+plan.groups+"种、"+plan.pieces+"颗、"+plan.strands+"串。总成本 ¥"+(plan.cents/100).toFixed(2)+"，与整套实付一致。单颗、单串建议售价按成本的 "+state.markup+" 倍试算。");
   status("已生成可复制台账；没有写入正式库存。");
  }catch(e){status(e.message,true)}
+}
+function encodeImage(img){
+ const w=img.width||img.naturalWidth,h=img.height||img.naturalHeight;
+ if(!w||!h)throw Error("照片尺寸不正确");
+ const attempts=[[1200,.82],[1000,.74],[840,.68],[680,.62]];
+ for(const [limit,quality] of attempts){
+  const scale=Math.min(1,limit/Math.max(w,h));
+  const canvas=document.createElement("canvas");
+  canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));
+  const ctx=canvas.getContext("2d");if(!ctx)throw Error("浏览器无法处理图片");
+  ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  const out=canvas.toDataURL("image/jpeg",quality);
+  if(out.length<=500000)return out;
+ }
+ throw Error("照片数据太大，请裁剪局部后重新上传");
 }
 async function compress(file){
  if(!file?.type.startsWith("image/"))throw Error("请选择图片");
  if(file.size>14*1024*1024)throw Error("单张原图最多14MB");
  let bmp;
  if("createImageBitmap" in window)bmp=await createImageBitmap(file);
- else bmp=await new Promise((ok,fail)=>{const uri=URL.createObjectURL(file),im=new Image();im.onload=()=>{URL.revokeObjectURL(uri);ok(im)};im.onerror=()=>{URL.revokeObjectURL(uri);fail(Error("图片无法读取"))};im.src=uri});
- try{
-  const w=bmp.width||bmp.naturalWidth,h=bmp.height||bmp.naturalHeight,f=Math.min(1,720/Math.max(w,h));
-  const canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(w*f));canvas.height=Math.max(1,Math.round(h*f));
-  const ctx=canvas.getContext("2d");if(!ctx)throw Error("浏览器无法压缩图片");
-  ctx.fillStyle="white";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bmp,0,0,canvas.width,canvas.height);
-  let out=canvas.toDataURL("image/jpeg",.67);
-  if(out.length>420000){
-   const c=document.createElement("canvas");const g=Math.min(1,520/Math.max(w,h));c.width=Math.max(1,Math.round(w*g));c.height=Math.max(1,Math.round(h*g));
-   c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
-   out=c.toDataURL("image/jpeg",.56);
-  }
-  if(out.length>520000)throw Error("压缩后图片仍过大，请换一张尺寸更小的");
-  return out;
- }finally{bmp.close?.()}
+ else bmp=await new Promise((ok,fail)=>{
+  const uri=URL.createObjectURL(file),im=new Image();
+  im.onload=()=>{URL.revokeObjectURL(uri);ok(im)};
+  im.onerror=()=>{URL.revokeObjectURL(uri);fail(Error("图片无法读取"))};
+  im.src=uri;
+ });
+ try{return encodeImage(bmp)}finally{bmp.close?.()}
+}
+async function compressData(data){
+ const img=await new Promise((ok,fail)=>{
+  const im=new Image();im.onload=()=>ok(im);im.onerror=()=>fail(Error("图片无法读取"));im.src=data;
+ });
+ return encodeImage(img);
 }
 async function photos(files){
- for(const file of [...files].slice(0,4-state.images.length))state.images.push(await compress(file));
- render();status("已添加 "+state.images.length+" 张本地参考照片；不自动上传，刷新后需要重新选择。");
+ sync();
+ const selected=[...files].slice(0,Math.max(0,4-state.images.length));
+ if(!selected.length){status("最多保留4张照片，请先删除不需要的照片。",true);return}
+ for(const file of selected)state.images.push({original:await compress(file),edited:null,source:"相册上传"});
+ clearOutput();render();status("已添加 "+selected.length+" 张照片。点击图片的“编辑”可裁剪、旋转、增强。照片不自动上传。");
+}
+async function editPhoto(i){
+ const photo=state.images[i];if(!photo)throw Error("照片不存在");
+ if(!window.BeadPhotoEditor?.open)throw Error("图片编辑器未加载");
+ sync();
+ const result=await window.BeadPhotoEditor.open(photo.edited||photo.original);
+ if(result){photo.edited=await compressData(result);clearOutput();render();status("已保存编辑效果，原图仍保留；可随时恢复。")}
+}
+function restorePhoto(i){
+ const photo=state.images[i];if(!photo)return;
+ sync();photo.edited=null;clearOutput();render();status("已恢复原图。");
+}
+async function cameraPhoto(){
+ if(state.images.length>=4)throw Error("最多4张照片，请先删除一张");
+ if(!window.BeadPhotoAccess?.camera)throw Error("拍照组件尚未加载");
+ sync();
+ await window.BeadPhotoAccess.camera(async data=>{
+  const idx=state.images.push({original:await compressData(data),edited:null,source:"直接拍照"})-1;
+  clearOutput();render();status("拍照成功，可在接下来的编辑器中裁剪或旋转；取消编辑也会保留原图。");
+  await editPhoto(idx);
+ });
+}
+async function pastePhoto(){
+ if(state.images.length>=4)throw Error("最多4张照片，请先删除一张");
+ if(!window.BeadPhotoAccess?.clipboard)throw Error("当前浏览器不支持读取剪贴板图片");
+ sync();
+ await window.BeadPhotoAccess.clipboard(async data=>{
+  state.images.push({original:await compressData(data),edited:null,source:"剪贴板"});
+  clearOutput();render();status("已添加剪贴板图片，可点击“编辑”进行裁剪。");
+ });
 }
 function applyAI(data){
  if(!Array.isArray(data.items))throw Error("模型返回的商品列表无效");
@@ -253,7 +310,7 @@ async function callAI(){
  try{
   const res=await fetch(url.href,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+state.token},
    body:JSON.stringify({mode:"blind_review",text:state.description.slice(0,4500),totalPrice:state.total,rows:state.rows,
-    images:state.images.slice(0,4),question:state.lastQuestion,followup:state.messages.filter(m=>m.role==="user").slice(-6).map(m=>m.text)}),signal:abort.signal});
+    images:state.images.slice(0,4).map(x=>x.edited||x.original),question:state.lastQuestion,followup:state.messages.filter(m=>m.role==="user").slice(-6).map(m=>m.text)}),signal:abort.signal});
   const payload=await res.json().catch(()=>({error:"AI接口没有返回JSON"}));
   if(!res.ok)throw Error(payload.error||"AI请求HTTP "+res.status);
   if(payload.mode!=="blind_review")throw Error("云函数尚未启用盲盒图片核对接口，需要同步更新 CloudBase 的 index.js");
@@ -271,8 +328,12 @@ function handleButton(e){
   check();return;
  }
  if(action==="add"){sync();state.rows.push(P().cleanRow());clearOutput();renderRows();return}
+ if(action==="camera"){cameraPhoto().catch(err=>status(err.message||String(err),true));return}
+ if(action==="paste-photo"){pastePhoto().catch(err=>status(err.message||String(err),true));return}
+ if(action==="edit-image"){editPhoto(Number(button.dataset.index)).catch(err=>status(err.message||String(err),true));return}
+ if(action==="restore-image"){restorePhoto(Number(button.dataset.index));return}
  if(action==="remove"){const i=Number(button.dataset.index);if(i>=0&&i<state.rows.length){state.rows.splice(i,1);clearOutput();renderRows();check()};return}
- if(action==="remove-image"){const i=Number(button.dataset.index);if(i>=0&&i<state.images.length){state.images.splice(i,1);render()};return}
+ if(action==="remove-image"){const i=Number(button.dataset.index);if(i>=0&&i<state.images.length){sync();state.images.splice(i,1);clearOutput();render()};return}
  if(action==="reply"){reply();return}
  if(action==="ask"){check();return}
  if(action==="allocate"){allocate();return}
@@ -294,7 +355,7 @@ function copyFallback(){
 }
 function onInput(e){
  const target=e.target;
- if(target.matches("#baw-total,#baw-markup,#baw-description,#baw-endpoint,#baw-token")){sync();if(!target.matches("#baw-endpoint,#baw-token"))clearOutput();return}
+ if(target.matches("#baw-total,#baw-markup,#baw-strand-factor,#baw-description,#baw-endpoint,#baw-token")){sync();if(!target.matches("#baw-endpoint,#baw-token"))clearOutput();return}
  if(target.matches("[data-baw-field]")){
   const node=target.closest("[data-baw-row]"),i=Number(node?.dataset.bawRow);
   if(!state.rows[i])return;
@@ -305,6 +366,7 @@ function onInput(e){
 }
 function onChange(e){
  if(e.target.id==="baw-pictures"){photos(e.target.files).catch(err=>status(err.message||String(err),true));return}
+ if(e.target.id==="baw-confirm"){state.confirmed=!!e.target.checked;persist();return}
  if(e.target.matches("[data-baw-field]")){
   const node=e.target.closest("[data-baw-row]"),i=Number(node?.dataset.bawRow);
   if(state.rows[i]){state.rows[i][e.target.dataset.bawField]=e.target.value;clearOutput()}
