@@ -27,6 +27,8 @@ async function open(source){
    '<section id="bead-edit-panel" role="dialog" aria-modal="true" aria-label="照片编辑">',
    '<div class="bead-edit-row" style="justify-content:space-between"><strong>照片编辑</strong><button class="bead-edit-btn" type="button" data-edit="cancel">关闭</button></div>',
    '<div class="bead-edit-row"><button class="bead-edit-btn active" type="button" data-edit="pen">✎ 画笔标记</button><button class="bead-edit-btn" type="button" data-edit="crop">▣ 框选裁切</button><button class="bead-edit-btn" type="button" data-edit="apply-crop" disabled>完成裁切</button></div>',
+   '<div class="bead-edit-row"><button class="bead-edit-btn" type="button" data-edit="rotate-left">↶ 左转90°</button><button class="bead-edit-btn" type="button" data-edit="rotate-right">↷ 右转90°</button><button class="bead-edit-btn" type="button" data-edit="flip">⇆ 水平翻转</button></div>',
+   '<div class="bead-edit-row"><label>亮度 <input type="range" id="bead-edit-bright" min="-60" max="60" value="0"></label><label>对比度 <input type="range" id="bead-edit-contrast" min="-60" max="60" value="0"></label><button class="bead-edit-btn" type="button" data-edit="tone">应用调节</button><button class="bead-edit-btn" type="button" data-edit="sharpen">轻度锐化</button></div>',
    '<div class="bead-edit-row"><label>颜色 <input type="color" id="bead-edit-color" value="#ef3b35"></label><label>画笔粗细 <input type="range" id="bead-edit-width" min="2" max="22" value="6"></label><button class="bead-edit-btn" type="button" data-edit="undo">↶ 撤销</button><button class="bead-edit-btn" type="button" data-edit="reset">重置</button></div>',
    '<div id="bead-edit-stage"><canvas id="bead-edit-base"></canvas><canvas id="bead-edit-overlay"></canvas></div>',
    '<div id="bead-edit-status">在照片上用画笔圈画；裁切时拖动选出保留区域。</div>',
@@ -101,6 +103,43 @@ async function open(source){
     base.width=tmp.width;base.height=tmp.height;ctx.drawImage(tmp,0,0);
     layer.width=base.width;layer.height=base.height;switchMode("pen");say("裁切完成，可继续标记或保存。");
    }
+   function rotateAndFlip(angle=0,mirror=false){
+    saveState();
+    const old=document.createElement("canvas");old.width=base.width;old.height=base.height;
+    old.getContext("2d").drawImage(base,0,0);
+    const turn=angle!==0,wt=turn?old.height:old.width,ht=turn?old.width:old.height;
+    base.width=wt;base.height=ht;
+    ctx.save();ctx.translate(wt/2,ht/2);ctx.rotate(angle*Math.PI/180);ctx.scale(mirror?-1:1,1);
+    ctx.drawImage(old,-old.width/2,-old.height/2);ctx.restore();
+    layer.width=wt;layer.height=ht;rect=null;switchMode("pen");say("已调整方向，可继续裁剪。");
+   }
+   function adjustTone(){
+    const bright=Number(shade.querySelector("#bead-edit-bright").value);
+    const contrast=Number(shade.querySelector("#bead-edit-contrast").value);
+    if(!bright&&!contrast){say("请先调节亮度或对比度，再点击应用。");return}
+    saveState();
+    const data=ctx.getImageData(0,0,base.width,base.height),d=data.data;
+    const c=(259*(contrast+255))/(255*(259-contrast));
+    for(let i=0;i<d.length;i+=4)for(let j=0;j<3;j++)d[i+j]=Math.max(0,Math.min(255,c*(d[i+j]-128)+128+bright));
+    ctx.putImageData(data,0,0);
+    shade.querySelector("#bead-edit-bright").value="0";shade.querySelector("#bead-edit-contrast").value="0";
+    say("已应用亮度/对比度调整。可撤销，原图不会被覆盖。");
+   }
+   function sharpen(){
+    if(base.width*base.height>4000000)throw Error("图片过大，请先裁剪或缩小后再锐化");
+    saveState();
+    const img=ctx.getImageData(0,0,base.width,base.height),out=ctx.createImageData(base.width,base.height);
+    out.data.set(img.data);
+    const d=img.data,t=out.data,w=base.width,h=base.height;
+    for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+     const p=(y*w+x)*4;
+     for(let k=0;k<3;k++){
+      const v=d[p+k]*1.72-.18*(d[p-4+k]+d[p+4+k]+d[p-4*w+k]+d[p+4*w+k]);
+      t[p+k]=Math.max(0,Math.min(255,v));
+     }
+    }
+    ctx.putImageData(out,0,0);say("已轻度锐化。过度锐化可能影响材质判断，建议核对原图。");
+   }
    shade.addEventListener("click",async e=>{
     if(e.target===shade){finish(null);return}
     const action=e.target.closest("[data-edit]")?.dataset.edit;
@@ -108,6 +147,11 @@ async function open(source){
     try{
      if(action==="cancel"){finish(null);return}
      if(action==="pen"||action==="crop"){switchMode(action);return}
+      if(action==="rotate-left"){rotateAndFlip(-90);return}
+      if(action==="rotate-right"){rotateAndFlip(90);return}
+      if(action==="flip"){rotateAndFlip(0,true);return}
+      if(action==="tone"){adjustTone();return}
+      if(action==="sharpen"){sharpen();return}
      if(action==="apply-crop"){applyCrop();return}
      if(action==="undo"){if(history.length){busy=true;await restore(history.pop());undoButton.disabled=history.length===0;say("已撤销。")}else if(rect){rect=null;previewCrop()}return}
      if(action==="reset"){busy=true;history=[];await restore(original);undoButton.disabled=true;switchMode("pen");say("已恢复原始图片。");return}
