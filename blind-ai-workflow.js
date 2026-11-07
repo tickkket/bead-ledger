@@ -296,7 +296,7 @@ async function callAI(){
  try{
   const res=await fetch(url.href,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+state.token},
    body:JSON.stringify({mode:"blind_review",text:state.description.slice(0,4500),totalPrice:state.total,rows:state.rows,
-    images:state.images.slice(0,4).map(x=>x.edited||x.original),originalImages:state.images.slice(0,4).map(x=>x.edited?x.original:null),question:state.lastQuestion,followup:state.messages.filter(m=>m.role==="user").slice(-6).map(m=>m.text)}),signal:abort.signal});
+    images:state.images.slice(0,4).map(x=>x.edited||x.original),question:state.lastQuestion,followup:state.messages.filter(m=>m.role==="user").slice(-6).map(m=>m.text)}),signal:abort.signal});
   const payload=await res.json().catch(()=>({error:"AI接口没有返回JSON"}));
   if(!res.ok)throw Error(payload.error||"AI请求HTTP "+res.status);
   if(payload.mode!=="blind_review")throw Error("云函数尚未启用盲盒图片核对接口，需要同步更新 CloudBase 的 index.js");
