@@ -154,7 +154,7 @@ function check(){
   status("信息未齐全，暂时不能分摊。",true);
  }else{
   state.lastQuestion="";
-  addMessage("信息齐全：共 "+state.rows.length+" 种、"+state.rows.reduce((n,x)=>n+Number(x.qty),0)+" 颗。请确认各品类权重，然后生成台账。");
+  addMessage("信息齐全：共 "+state.rows.length+" 种、"+state.rows.filter(x=>x.unit!=="串").reduce((n,x)=>n+Number(x.qty),0)+" 颗与 "+state.rows.filter(x=>x.unit==="串").reduce((n,x)=>n+Number(x.qty),0)+" 串。请核对权重并勾选确认。");
   status("可以进行成本分摊。");
  }
  return questions;
@@ -162,8 +162,8 @@ function check(){
 function mergeLines(input){
  const incoming=P().parseLines(input);
  for(const r of incoming){
-  const found=state.rows.find(x=>x.name&&r.name===x.name);
-  if(found){for(const key of ["card","qty","shape","name"])if(!found[key]&&r[key])found[key]=r[key]}
+  const found=state.rows.find(x=>x.name&&r.name===x.name&&x.unit===r.unit&&(!r.card||!x.card||r.card===x.card)&&(!r.shape||!x.shape||r.shape===x.shape));
+  if(found){for(const key of ["card","qty","shape","name","kind","unit"])if(!found[key]&&r[key])found[key]=r[key]}
   else state.rows.push(r);
  }
  return incoming.length;
@@ -171,30 +171,35 @@ function mergeLines(input){
 function reply(){
  const t=str(el("baw-reply")?.value);if(!t){status("请先输入补充信息。",true);return}
  addMessage(t,"user");
- const x=t.match(/第\s*(\d+)\s*(?:种|个|条|行)/);
- const target=x?state.rows[Number(x[1])-1]:state.rows.length===1?state.rows[0]:null;
- if(target){
-  const card=t.match(/(?:卡数|卡)\s*(?:是|为|[:：])?\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*卡/);
-  const qty=t.match(/(\d+)\s*(?:颗|粒|个)/),shape=P().shapeFor(t);
+ const parts=t.split(/[；;]+|(?=第\s*\d+\s*(?:种|个|条|行))/).map(str).filter(Boolean);
+ for(const part of parts){
+  const x=part.match(/第\s*(\d+)\s*(?:种|个|条|行)/);
+  const target=x?state.rows[Number(x[1])-1]:state.rows.length===1?state.rows[0]:null;
+  if(!target){mergeLines(part);continue}
+  const card=part.match(/(?:卡数|卡)\s*(?:是|为|[:：])?\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*卡/);
+  const qty=part.match(/(\d+)\s*(颗|粒|个|串)/),shape=P().shapeFor(part);
   if(card)target.card=card[1]||card[2];
-  if(/没有卡数|卡数不适用/.test(t))target.card="不适用";
-  if(qty)target.qty=qty[1];if(shape)target.shape=shape;
+  if(/没有卡数|无卡数|卡数不适用/.test(part))target.card="不适用";
+  if(qty){target.qty=qty[1];target.unit=qty[2]==="串"?"串":"颗";if(target.unit==="串")target.kind="手串";}
+  if(shape)target.shape=shape;
+  if(/手串/.test(part))target.kind="手串";
   if(!target.name){
-   const n=t.replace(/第\s*\d+\s*(?:种|条|行|个)/g,"").replace(/卡数?|数量|形状|是|为|\d+(?:\.\d+)?|颗|粒|，|,|。|:|：/g,"").trim();
+   const n=part.replace(/第\s*\d+\s*(?:种|条|行|个)/g,"").replace(/卡数?|数量|形状|是|为|\d+(?:\.\d+)?|颗|粒|串|，|,|。|:|：/g,"").trim();
    if(n&&!P().SHAPES.includes(n))target.name=n.slice(0,80);
   }
- }else mergeLines(t);
+ }
  el("baw-reply").value="";
  clearOutput();renderRows();check();
 }
-function clearOutput(){state.output="";state.plan=null;if(el("baw-output"))el("baw-output").innerHTML="";persist()}
+function clearOutput(){state.output="";state.plan=null;state.confirmed=false;const box=el("baw-confirm");if(box)box.checked=false;if(el("baw-output"))el("baw-output").innerHTML="";persist()}
 function allocate(){
  sync();
  if(P().questions(state.rows,state.total).length){check();return}
+ if(!state.confirmed){status("请先核对明细，并勾选台账生成按钮上方的确认框。",true);return}
  try{
-  const plan=P().allocate(state.total,state.rows,state.markup);
+  const plan=P().allocate(state.total,state.rows,state.markup,state.strandFactor);
   state.plan=plan;state.output=P().toTSV(plan);persist();renderOutput();
-  addMessage("分摊完成："+plan.groups+"种、"+plan.qty+"颗。总成本 ¥"+(plan.cents/100).toFixed(2)+"，与整套实付一致。建议售价按成本的 "+state.markup+" 倍试算，可以自行调整。");
+  addMessage("分摊完成："+plan.groups+"种、"+plan.pieces+"颗、"+plan.strands+"串。总成本 ¥"+(plan.cents/100).toFixed(2)+"，与整套实付一致。单颗、单串建议售价按成本的 "+state.markup+" 倍试算。");
   status("已生成可复制台账；没有写入正式库存。");
  }catch(e){status(e.message,true)}
 }
@@ -299,7 +304,7 @@ function copyFallback(){
 }
 function onInput(e){
  const target=e.target;
- if(target.matches("#baw-total,#baw-markup,#baw-description,#baw-endpoint,#baw-token")){sync();if(!target.matches("#baw-endpoint,#baw-token"))clearOutput();return}
+ if(target.matches("#baw-total,#baw-markup,#baw-strand-factor,#baw-description,#baw-endpoint,#baw-token")){sync();if(!target.matches("#baw-endpoint,#baw-token"))clearOutput();return}
  if(target.matches("[data-baw-field]")){
   const node=target.closest("[data-baw-row]"),i=Number(node?.dataset.bawRow);
   if(!state.rows[i])return;
@@ -310,6 +315,7 @@ function onInput(e){
 }
 function onChange(e){
  if(e.target.id==="baw-pictures"){photos(e.target.files).catch(err=>status(err.message||String(err),true));return}
+ if(e.target.id==="baw-confirm"){state.confirmed=!!e.target.checked;persist();return}
  if(e.target.matches("[data-baw-field]")){
   const node=e.target.closest("[data-baw-row]"),i=Number(node?.dataset.bawRow);
   if(state.rows[i]){state.rows[i][e.target.dataset.bawField]=e.target.value;clearOutput()}
