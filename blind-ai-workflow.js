@@ -109,7 +109,8 @@ function render(){
  '<details><summary class="baw-note">AI 接口设置（首次使用或重新打开后填口令）</summary><div class="baw-grid" style="margin-top:8px">',
  '<label class="baw-field baw-wide">接口地址<input id="baw-endpoint" class="baw-input" type="url" value="'+escapeHTML(state.endpoint||getURL())+'" placeholder="https://…/api/intake"></label>',
  '<label class="baw-field baw-wide">个人访问口令（仅保留在当前页面，不写入草稿）<input id="baw-token" class="baw-input" type="password" autocomplete="off" value="'+escapeHTML(state.token)+'"></label></div>',
- '<p class="baw-note">上传的图片会在点击 AI 核对后发送到你配置的接口及模型服务。云函数需要新增盲盒核对模式；尚未升级时，可以使用本地核对、对话补齐和分摊导出。照片只供外观参考，AI不能确定材质真伪或精确卡数。</p></details></div>',
+ '<div class="baw-actions"><button type="button" class="baw-btn primary" data-baw="test-connection">检查 AI 接入状态</button></div>',
+ '<p class="baw-note">只检测接口连通、身份验证和盲盒接口是否部署，不消耗模型识别额度，也不会发送照片。重新打开页面需重新填写个人访问口令。</p></details></div>',
  '<div class="baw-panel"><b>逐种核对明细</b><p class="baw-note">“品类权重”可以按你对不同珠子价值的判断修改，默认系数不是市场估价。</p><div id="baw-rows"></div></div>',
  '<div class="baw-panel"><b>补齐信息</b><div id="baw-chat" class="baw-chat"></div>',
  '<label class="baw-field" style="margin-top:9px">回复追问（如“第2种10卡、3颗、圆珠”）<textarea id="baw-reply" class="baw-text" placeholder="在这里补充信息，也可以直接修改上面对应的输入框"></textarea></label>',
@@ -284,8 +285,13 @@ function applyAI(data){
   if(!item.name&&!item.card&&!item.qty&&!item.shape)continue;
   const old=Number.isInteger(suggestion.index)?state.rows[suggestion.index]:state.rows.find(r=>r.name&&r.name===item.name);
   if(old){
+   const wasBlank=!old.name&&!old.card&&!old.qty&&!old.shape;
    for(const key of ["name","card","qty","shape","notes"])if(!old[key]&&item[key])old[key]=item[key];
    if(old.group==="待确认品类"&&item.group!=="待确认品类")old.group=item.group;
+   if(wasBlank){old.unit=item.unit;old.kind=item.kind}
+   else if((suggestion.unit==="串"&&old.unit!=="串")||(suggestion.kind==="手串"&&old.kind!=="手串")){
+    addMessage("请核对第 "+(Number.isInteger(suggestion.index)?suggestion.index+1:state.rows.indexOf(old)+1)+" 种：AI建议按“"+item.unit+"”、来源“"+item.kind+"”记录；原有选择未自动覆盖。");
+   }
    updated++;
   }else{state.rows.push(item);added++}
  }
@@ -296,6 +302,31 @@ function applyAI(data){
  else if(Array.isArray(data.questions)&&data.questions.length)addMessage(data.questions.map(x=>"· "+str(x)).join("\n"));
  addMessage("AI给出 "+updated+" 条原行补充、新增 "+added+" 条待确认候选。已填写的字段没有被AI覆盖，仍请核对照片中的外观。");
  check();
+}
+async function testConnection(){
+ sync();
+ let url;
+ try{url=new URL(state.endpoint);if(url.protocol!=="https:"||url.username||url.password)throw Error()}
+ catch{return status("请填写之前已配置的 CloudBase HTTPS 接口地址，地址应以 /api/intake 结尾。",true)}
+ if(!state.token)return status("请填写原有个人访问口令（不是 Makers Models API Key）。口令不会写入草稿。",true);
+ if(state.busy)return;state.busy=true;
+ const button=overlay.querySelector('[data-baw="test-connection"]');if(button)button.disabled=true;
+ status("正在检查 AI 接口版本与授权；不会发送图片…");
+ const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),12000);
+ try{
+  const response=await fetch(url.href,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+state.token},
+   body:JSON.stringify({mode:"capabilities"}),signal:abort.signal});
+  const data=await response.json().catch(()=>({error:"返回的不是 JSON"}));
+  if(response.status===401)throw Error("访问口令错误。请核对原先配置的 LEDGER_ACCESS_TOKEN，不要填写 Makers Models API Key。");
+  if(response.status===403)throw Error("CloudBase 禁止当前网站来源，请核对 ALLOWED_ORIGIN。");
+  if(response.status===503)throw Error("云函数缺少必要环境变量，请确认 MAKERS_MODELS_KEY 与 LEDGER_ACCESS_TOKEN 已配置。");
+  if(response.status===400&&/进货描述|输入|文字/.test(String(data.error||"")))throw Error("CloudBase 仍运行旧版云函数，请将 GitHub cloudbase/index.js 部署到 bead-ledger-ai-proxy 后重新检查。");
+  if(!response.ok)throw Error("接口 HTTP "+response.status+"："+(data.error||"未知错误"));
+  if(data.mode!=="capabilities"||!data.blindReview)throw Error("接口可访问，但尚未部署支持盲盒图片识别的新版 CloudBase 云函数。");
+  const info="AI 接口验证通过，CloudBase v"+(data.apiVersion||"?")+" 盲盒接口已部署，视觉模型："+(data.visionModel||"未返回")+"。请再上传一张照片验证实际图像识别。";
+  addMessage(info);status(info);
+ }catch(e){const msg=e.name==="AbortError"?"连接超时，请检查网络、云函数和接口地址":e.message||String(e);addMessage("AI接入检查失败："+msg);status(msg,true)}
+ finally{clearTimeout(timer);state.busy=false;if(button)button.disabled=false}
 }
 async function callAI(){
  sync();
@@ -312,7 +343,7 @@ async function callAI(){
    body:JSON.stringify({mode:"blind_review",text:state.description.slice(0,4500),totalPrice:state.total,rows:state.rows,
     images:state.images.slice(0,4).map(x=>x.edited||x.original),question:state.lastQuestion,followup:state.messages.filter(m=>m.role==="user").slice(-6).map(m=>m.text)}),signal:abort.signal});
   const payload=await res.json().catch(()=>({error:"AI接口没有返回JSON"}));
-  if(!res.ok)throw Error(payload.error||"AI请求HTTP "+res.status);
+  if(!res.ok){if(res.status===400&&/进货描述|文字/.test(String(payload.error||"")))throw Error("CloudBase 尚未部署支持 blind_review 的新版云函数，请更新 bead-ledger-ai-proxy 的 index.js");throw Error(payload.error||"AI请求HTTP "+res.status)}
   if(payload.mode!=="blind_review")throw Error("云函数尚未启用盲盒图片核对接口，需要同步更新 CloudBase 的 index.js");
   applyAI(payload);status("AI 核对完毕，请人工确认照片与每行信息。");
  }catch(e){status((e.name==="AbortError"?"AI核对超时":e.message||String(e))+"。可继续本地补齐及分摊。",true)}
@@ -338,6 +369,7 @@ function handleButton(e){
  if(action==="ask"){check();return}
  if(action==="allocate"){allocate();return}
  if(action==="ai"){callAI();return}
+ if(action==="test-connection"){testConnection();return}
  if(action==="copy"){
   if(!state.output)return status("先补齐信息，点击“生成成本台账”。",true);
   if(navigator.clipboard?.writeText)navigator.clipboard.writeText(state.output).then(()=>status("台账已复制，可粘贴至WPS/Excel。")).catch(copyFallback);
