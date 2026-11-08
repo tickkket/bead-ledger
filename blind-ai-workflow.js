@@ -88,7 +88,7 @@ function createHost(){
  overlay.setAttribute("role","dialog");overlay.setAttribute("aria-modal","true");overlay.setAttribute("aria-label","AI盲盒整理");
  overlay.innerHTML='<div class="baw-shell"><div class="baw-head"><h3>✨ AI 盲盒整理</h3><button type="button" class="baw-btn" data-baw="close">关闭</button></div><div id="baw-content"></div></div>';
  document.body.append(overlay);
- overlay.addEventListener("click",onClick);
+ overlay.addEventListener("click",handleButton);
  overlay.addEventListener("input",onInput);
  overlay.addEventListener("change",onChange);
 }
