@@ -217,6 +217,7 @@ async function onRequest(context){
    return res({error:"个人访问口令错误"},401,cors);
  if(Number(req.headers.get("Content-Length")||0)>2250000)return res({error:"请求体超出2.25MB，请减少图片数量"},413,cors);
  let body;try{body=await req.json()}catch{return res({error:"请求格式错误"},400,cors)}
+ if(body?.mode==="capabilities")return res({mode:"capabilities",apiVersion:66,blindReview:true,acceptsImages:true,visionModel:String(env.BLIND_VISION_MODEL||"@makers/deepseek-v4.1-flash"),notice:"接口已通过身份验证；视觉模型是否能识别图片需实际调用确认。"},200,cors);
  if(body?.mode==="blind_review")return blindReview(body,env,cors);
  if(typeof body?.text!=="string"||body.text.trim().length<1||body.text.length>4000)
    return res({error:"请提供1至4000字的进货描述"},400,cors);
